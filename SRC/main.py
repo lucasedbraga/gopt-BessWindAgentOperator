@@ -24,7 +24,11 @@ def main():
     try:
         # 1. CARREGAR SISTEMA
         print("\n1. Carregando dados do sistema...")
-        json_path = "DATA/input/B6L8_BASE.json"
+        json_path = "DATA/input/3barras_BASE.json"
+        # json_path = "DATA/input/B6L8_BASE.json"
+        # json_path = "DATA/input/ieee14_BASE.json"
+        # json_path = "DATA/input/ieee118_BASE.json"
+        
         
         if not os.path.exists(json_path):
             print(f"ERRO: Arquivo não encontrado: {json_path}")
@@ -97,6 +101,7 @@ def main():
         # Exportar resultados para o banco de dados
         db_handler = OPF_DBHandler('DATA/output/resultados_PL.db')
         db_handler.create_tables()
+        cen_id = datetime.now().strftime('%Y%m%d%H%M%S') # ID único para esta simulação
         for snapshot in opf_result.snapshots:
             db_handler.save_hourly_result(
                 resultado=snapshot,
@@ -105,7 +110,8 @@ def main():
                 perfil_carga=fator_carga[snapshot.dia, snapshot.hora],
                 perfil_eolica=fator_vento[snapshot.dia, snapshot.hora],
                 solver_name='glpk',
-                dia=str(snapshot.dia+1)
+                dia=str(snapshot.dia+1),
+                cen_id=cen_id
             )
             print(f"Dia {snapshot.dia+1}, Hora {snapshot.hora:02d}:00, Sucesso: {snapshot.sucesso}")
         print("\nEXECUÇÃO FINALIZADA")

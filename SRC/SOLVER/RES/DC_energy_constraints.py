@@ -61,7 +61,7 @@ class DCEnergyConstraints:
         model.BatterySOCMax = Constraint(model.BATTERIES, rule=soc_max_rule)
         
         def soc_min_rule(m, b):
-            return m.SOC[b] >= 0.0
+            return m.SOC[b] >= 0.1*sistema.BATTERY_CAPACITY[b]
         model.BatterySOCMin = Constraint(model.BATTERIES, rule=soc_min_rule)
         
         # ------------------------------------------------------------------------

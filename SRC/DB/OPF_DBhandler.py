@@ -23,14 +23,15 @@ class OPF_DBHandler:
             self.conn.close()
     
     def create_tables(self):
-        """Cria tabelas necessárias"""
+        """Cria tabelas necessárias com as novas colunas de cenário"""
         conn = self.connect()
         cursor = conn.cursor()
         
-        # Tabela principal
+        # Tabela principal com cen_id e unique constraint
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS resultados_opf (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cen_id TEXT,                                -- <-- NOVO
             timestamp TEXT,
             tipo_snapshot TEXT,
             data_simulacao TEXT,
@@ -51,11 +52,15 @@ class OPF_DBHandler:
             pg_json TEXT,
             ang_json TEXT,
             fluxos_json TEXT,
-            mensagem TEXT
+            mensagem TEXT,
+            UNIQUE(cen_id, data_simulacao, hora_simulacao)   -- <-- NOVO
         )
         ''')
         
-        # Tabela de detalhes por barra
+        # Índice para facilitar buscas por cen_id
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_resultados_cen ON resultados_opf(cen_id)')  # <-- NOVO
+        
+        # Tabela de detalhes por barra (sem alterações – usa resultado_id)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS detalhes_barras (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +77,7 @@ class OPF_DBHandler:
         )
         ''')
         
-        # Tabela de detalhes por gerador
+        # Tabela de detalhes por gerador (sem alterações)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS detalhes_geradores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +94,7 @@ class OPF_DBHandler:
         )
         ''')
         
-        # Tabela de detalhes por linha
+        # Tabela de detalhes por linha (sem alterações)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS detalhes_linhas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,11 +110,12 @@ class OPF_DBHandler:
         )
         ''')
         
-        # Tabela específica para BESS-WIND
+        # Tabela específica para BESS-WIND (agora com cen_id)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS bess_wind_operacao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             resultado_id INTEGER,
+            cen_id TEXT,                                 -- <-- NOVO
             data_simulacao TEXT,
             hora_simulacao INTEGER,
             barra_bess INTEGER,
@@ -126,12 +132,16 @@ class OPF_DBHandler:
         
         conn.commit()
         conn.close()
-        print("✓ Tabelas criadas/verificadas")
+        print("✓ Tabelas criadas/verificadas com colunas de cenário")
     
     def save_hourly_result(self, resultado, sistema, hora: int,
                           perfil_carga: float, perfil_eolica: float,
-                          solver_name: str = 'glpk', dia: Optional[str] = None) -> int:
-        """Salva resultado no banco de dados"""
+                          solver_name: str = 'glpk', dia: Optional[str] = None,
+                          cen_id: Optional[str] = None) -> int:          # <-- NOVO parâmetro
+        """Salva resultado no banco de dados, incluindo o identificador de cenário"""
+        if cen_id is None:
+            raise ValueError("cen_id é obrigatório para identificar a simulação")
+        
         conn = self.connect()
         cursor = conn.cursor()
         
@@ -148,15 +158,16 @@ class OPF_DBHandler:
             if g_idx < len(resultado.PG):
                 eolica_utilizada += resultado.PG[g_idx] * sistema.SB
         
-        # Inserir resultado principal (inclui data/hora separados)
+        # Inserir resultado principal com cen_id
         cursor.execute('''
         INSERT INTO resultados_opf 
-        (timestamp, tipo_snapshot, data_simulacao, hora_simulacao, sucesso, custo_total, deficit_total, 
+        (cen_id, timestamp, tipo_snapshot, data_simulacao, hora_simulacao, sucesso, custo_total, deficit_total, 
          curtailment_total, perdas_total, carga_total, eolica_disponivel, 
          eolica_utilizada, fator_vento, iteracoes, tempo_execucao, 
          solver, sistema_base, pg_json, ang_json, fluxos_json, mensagem)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
+            cen_id,                                                      # <-- NOVO
             timestamp,
             f"Hora_{hora:02d}",
             dia if dia is not None else None,
@@ -182,7 +193,7 @@ class OPF_DBHandler:
         
         resultado_id = cursor.lastrowid
         
-        # Salvar detalhes por barra
+        # Salvar detalhes por barra (sem alterações – usa resultado_id)
         for i in range(sistema.NBAR):
             barra_id = sistema.indice_para_barra[i]
             
@@ -216,7 +227,7 @@ class OPF_DBHandler:
                 float(resultado.cmo_total)  # Simplificado - mesmo CMO para todas as barras em DC
             ))
         
-        # Salvar detalhes por gerador
+        # Salvar detalhes por gerador (sem alterações)
         for g_idx in range(len(resultado.PG)):
             if g_idx < len(sistema.BARPG):
                 barra_idx = sistema.BARPG[g_idx]
@@ -249,7 +260,7 @@ class OPF_DBHandler:
                     float(curtailment_mw)
                 ))
         
-        # Salvar detalhes por linha
+        # Salvar detalhes por linha (sem alterações)
         for e_idx in range(len(resultado.FLUXO)):
             if e_idx < sistema.NLIN:
                 de_barra = sistema.indice_para_barra[sistema.line_fr[e_idx]]
@@ -279,30 +290,46 @@ class OPF_DBHandler:
                     float(perdas_mw)
                 ))
         
-        # Salvar operação BESS-WIND (um registro por bateria)
+        # Salvar operação BESS-WIND (agora com cen_id)
         for idx, barra_bess in enumerate(sistema.BARRAS_COM_BATERIA):
             soc_percent = None
             potencia_bess_mw = None
             operacao = None
-            if hasattr(resultado, 'SOC') and idx < len(resultado.SOC):
-                soc_percent = resultado.SOC[idx] * 100  # SOC em percentual
-            if hasattr(resultado, 'BATTERY_POWER') and idx < len(resultado.BATTERY_POWER):
-                potencia_bess_mw = resultado.BATTERY_POWER[idx] * sistema.SB  # MW
-            if hasattr(resultado, 'BATTERY_OPERATION') and idx < len(resultado.BATTERY_OPERATION):
-                operacao = resultado.BATTERY_OPERATION[idx]
-            # GWD
-            barra_gwd = sistema.BAR_GWD[0] if len(sistema.BAR_GWD) > 0 else None
+
+            # SOC
+            if hasattr(resultado, 'SOC') and isinstance(resultado.SOC, (list, tuple)) and idx < len(resultado.SOC):
+                soc_percent = resultado.SOC[barra_bess] * 100  # SOC em percentual
+
+            # BATTERY_POWER
+            if hasattr(resultado, 'BATTERY_POWER') and isinstance(resultado.BATTERY_POWER, (list, tuple)) and idx < len(resultado.BATTERY_POWER):
+                potencia_bess_mw = resultado.BATTERY_POWER[barra_bess] * sistema.SB  # MW
+
+            # BATTERY_OPERATION
+            if hasattr(resultado, 'BATTERY_OPERATION') and isinstance(resultado.BATTERY_OPERATION, (list, tuple)) and idx < len(resultado.BATTERY_OPERATION):
+                operacao = resultado.BATTERY_OPERATION[barra_bess]
+
+            # GWD (assumindo que há pelo menos um gerador eólico)
+            barra_gwd = sistema.BAR_GWD[0] if sistema.BAR_GWD else None
             potencia_gwd_mw = None
-            if barra_gwd is not None and barra_gwd < len(resultado.PG):
+            if barra_gwd is not None and hasattr(resultado, 'PG') and barra_gwd < len(resultado.PG):
                 potencia_gwd_mw = resultado.PG[barra_gwd] * sistema.SB  # MW utilizada
-            curtailment_gwd_mw = resultado.CURTAILMENT[0] * sistema.SB if hasattr(resultado, 'CURTAILMENT') and len(resultado.CURTAILMENT) > 0 else None
+
+            # Curtailment do GWD
+            curtailment_gwd_mw = None
+            if hasattr(resultado, 'CURTAILMENT') and resultado.CURTAILMENT:
+                curtailment_gwd_mw = resultado.CURTAILMENT[0] * sistema.SB
+
+            # Demanda total
             demanda_mw = np.sum(sistema.PLOAD) * sistema.SB
+
+            # Inserir no banco
             cursor.execute('''
                 INSERT INTO bess_wind_operacao 
-                (resultado_id, data_simulacao, hora_simulacao, barra_bess, soc_percent, operacao, potencia_bess_mw, barra_gwd, potencia_gwd_mw, curtailment_gwd_mw, demanda_mw)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (resultado_id, cen_id, data_simulacao, hora_simulacao, barra_bess, soc_percent, operacao, potencia_bess_mw, barra_gwd, potencia_gwd_mw, curtailment_gwd_mw, demanda_mw)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 resultado_id,
+                cen_id,
                 dia if dia is not None else None,
                 int(hora),
                 barra_bess,
@@ -321,7 +348,7 @@ class OPF_DBHandler:
         return resultado_id
     
     def export_to_csv(self, output_path: str):
-        """Exporta todos os resultados para CSV"""
+        """Exporta todos os resultados para CSV (inalterado)"""
         import os
         
         conn = self.connect()
