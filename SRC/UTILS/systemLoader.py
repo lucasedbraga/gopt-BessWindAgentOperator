@@ -380,3 +380,10 @@ class SistemaLoader:
             'linhas': self.linhas,
             'json_file_path': self.json_file_path
         }
+
+def load_system(json_file_path: str):
+    """
+    Função utilitária para carregar e retornar o objeto de sistema já processado.
+    Compatível com o uso em scripts principais.
+    """
+    return SistemaLoader(json_file_path)

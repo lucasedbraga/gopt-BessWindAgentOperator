@@ -1,6 +1,6 @@
 from pyomo.environ import ConcreteModel, Block, Var, Constraint, NonNegativeReals, Objective, minimize, ConstraintList
 from pyomo.opt import SolverFactory
-from OPT.DC_OPF_Model import DC_OPF_Model
+from DC_OPF_Model import DC_OPF_Model
 import numpy as np
 from SOLVER.FOB.economic_dispatch import DC_OPF_EconomicDispatch_Solver
 from dataclasses import dataclass, field

@@ -45,7 +45,7 @@ class DCEnergyConstraints:
         
         # Verificar se as variáveis necessárias existem no modelo
         if not hasattr(model, 'CHARGE') or not hasattr(model, 'DISCHARGE') or \
-        not hasattr(model, 'SOC') or not hasattr(model, 'SOC_PREV'):
+        not hasattr(model, 'SOC') or not hasattr(model, 'SOC_INI'):
             print("  Variáveis de bateria não definidas - pulando restrições")
             return
         
@@ -67,16 +67,16 @@ class DCEnergyConstraints:
         # ------------------------------------------------------------------------
         # 2. Condição inicial (SOC do período anterior)
         # ------------------------------------------------------------------------
-        def soc_initial_rule(m, b):
-            return m.SOC_PREV[b] == sistema.BATTERY_INITIAL_SOC[b]
-        model.BatterySOCInitial = Constraint(model.BATTERIES, rule=soc_initial_rule)
+        # def soc_initial_rule(m, b):
+        #     return m.SOC_PREV[b] == sistema.BATTERY_INITIAL_SOC[b]
+        # model.BatterySOCInitial = Constraint(model.BATTERIES, rule=soc_initial_rule)
         
         # ------------------------------------------------------------------------
         # 3. Balanço de energia (atualização do SOC)
         # ------------------------------------------------------------------------
         def soc_update_rule(m, b):
             # SOC final = SOC inicial + (carga * eficiência) - (descarga / eficiência_descarga)
-            return m.SOC[b] == m.SOC_PREV[b] + eff_carga * m.CHARGE[b] - (m.DISCHARGE[b] / eff_descarga)
+            return m.SOC[b] == m.SOC_INI[b] + eff_carga * m.CHARGE[b] - (m.DISCHARGE[b] / eff_descarga)
         model.BatterySOCUpdate = Constraint(model.BATTERIES, rule=soc_update_rule)
         
         # ------------------------------------------------------------------------

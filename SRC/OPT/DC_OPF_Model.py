@@ -75,7 +75,7 @@ class DC_OPF_Model:
         if hasattr(s, 'BATTERIES') and len(s.BATTERIES) > 0:
             m.BATTERIES = Set(initialize=s.BATTERIES)
         else:
-            m.BATTERIES = Set(initialize=[])  # Conjunto vazio
+            m.BATTERIES = Set(initialize=[])
         
         # === VARIÁVEIS ===
         m.PG = Var(m.GENERATORS, within=NonNegativeReals)
@@ -90,7 +90,7 @@ class DC_OPF_Model:
             m.CHARGE = Var(m.BATTERIES, within=NonNegativeReals)  # Carga
             m.DISCHARGE = Var(m.BATTERIES, within=NonNegativeReals)  # Descarga
             m.SOC = Var(m.BATTERIES, within=NonNegativeReals)  # Estado de carga atual
-            m.SOC_PREV = Var(m.BATTERIES, within=NonNegativeReals)  # Estado de carga anterior
+            m.SOC_INI = Var(m.BATTERIES, within=NonNegativeReals)  # Estado de carga anterior
         
         # Parâmetro para perdas (mutável para iteração)
         if considerar_perdas:
@@ -98,7 +98,10 @@ class DC_OPF_Model:
         
         # Fixar ângulo da barra slack
         m.ANG[s.slack_idx].fix(0.0)
-        
+        # Fixar SOC inicial das baterias (se houver)
+        for b in m.BATTERIES:
+            m.SOC_INI[b].fix((self.sistema.BATTERY_INITIAL_SOC)[b] if hasattr(self.sistema, 'BATTERY_INITIAL_SOC') else 0.0)
+
         # === RESTRIÇÕES ===
         self.add_constraints()
         
