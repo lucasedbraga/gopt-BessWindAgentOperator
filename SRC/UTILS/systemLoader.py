@@ -14,7 +14,7 @@ class SistemaLoader:
         self.linhas = []
         self.baterias_data = []
         
-        self.SB = 100.0  # Potência base (será atualizada)
+        self.SB = 100.0  # Potência base 
         self.VB = 230.0  # Tensão base
         self.f_base = 60.0  # Frequência base
         self.ZB = 0.0  # Impedância base
@@ -98,6 +98,7 @@ class SistemaLoader:
             self.BATTERY_POWER_LIMIT = np.zeros(self.NBAR)
             self.BATTERY_POWER_OUT = np.zeros(self.NBAR)
             self.BATTERY_CAPACITY = np.zeros(self.NBAR)
+            self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
             self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
             self.BATTERY_COST = np.zeros(self.NBAR)
 
@@ -271,11 +272,13 @@ class SistemaLoader:
         BATmax_out_base = np.zeros(self.NBAR)
         BATcapacidade_base = np.zeros(self.NBAR)
         BATarm_inicial_base = np.zeros(self.NBAR)
+        BATminSoc_base = np.zeros(self.NBAR)
         
         # Inicializar atributos do sistema
         self.BATTERY_POWER_LIMIT = np.zeros(self.NBAR)
         self.BATTERY_POWER_OUT = np.zeros(self.NBAR)
         self.BATTERY_CAPACITY = np.zeros(self.NBAR)
+        self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
         self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
         self.BATTERY_COST = np.zeros(self.NBAR)  # Custo de operação das baterias
 
@@ -299,12 +302,18 @@ class SistemaLoader:
             else:
                 capacidade = bat.get("capacidade_armazenamento_MWh", 0.0) / self.SB
             
+            if "capacidade_base_pu" in bat:
+                capacidade = bat["capacidade_base_pu"]
+            else:
+                capacidade = bat.get("capacidade_armazenamento_MWh", 0.0) / self.SB
+            
+
             # Armazenar valores
             BATmax_in_base[idx] = p_max_carga
             BATmax_out_base[idx] = bat.get("Pmax_descarga_pu", p_max_carga)  # Usar carga como padrão
             BATcapacidade_base[idx] = capacidade
-            BATarm_inicial_base[idx] = bat.get("SOC_inicial_pu", 0.5) * capacidade  # SOC 50% por padrão
-            
+            BATarm_inicial_base[idx] = bat.get("SOC_inicial_pu", 0.5) * capacidade
+            BATminSoc_base[idx] = bat.get("min_soc_pu", 0.1) * capacidade
             # Custo da bateria (penalidade por uso)
             self.BATTERY_COST[idx] = bat.get("custo_operacao_pu", 10.0)  # USD/pu
 
@@ -312,6 +321,7 @@ class SistemaLoader:
         self.BATTERY_POWER_LIMIT = BATmax_in_base.copy()
         self.BATTERY_POWER_OUT = BATmax_out_base.copy()
         self.BATTERY_CAPACITY = BATcapacidade_base.copy()
+        self.BATTERY_MIN_SOC = BATminSoc_base.copy()
         self.BATTERY_INITIAL_SOC = BATarm_inicial_base.copy()
         
         print(f"  ✓ Baterias processadas: {len(self.BARRAS_COM_BATERIA)} bateria(s) em {len(set(self.BARRAS_COM_BATERIA))} barra(s)")

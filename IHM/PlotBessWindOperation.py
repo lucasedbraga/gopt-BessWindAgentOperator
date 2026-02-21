@@ -86,7 +86,7 @@ class BatteryPlotter:
             return
 
         df_bat = self.df[self.df['barra_bess'] == barra_bess].copy()
-        if df_bat.empty:
+        if sum(df_bat['soc_percent']) == 0:
             print(f"⚠️  Nenhum registro para a bateria na barra {barra_bess}.")
             return
 

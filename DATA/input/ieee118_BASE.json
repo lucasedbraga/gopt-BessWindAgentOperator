@@ -8,7 +8,6 @@
   "Y_base": 0.00525,
   "T_base": 1.0,
 
-
   "BARRAS": [
     {"ID_Barra": "1", "tipo": "Slack"},
     {"ID_Barra": "2", "tipo": "PQ"},
@@ -136,13 +135,12 @@
       "ID_Barra": "1",
       "Tipo": "GWD",
       "custo_curtailment_USD_MWh": 100.0,
-
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 130.0,
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 10.0,
+      "custo_var_USD_MW": 10.0,
       "emissao_tCO2_MWh": 0.8,
       "Unidade": "MW"
     },
@@ -151,14 +149,12 @@
       "ID_Barra": "4",
       "Tipo": "GWD",
       "custo_curtailment_USD_MWh": 100.0,
-
-      
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 100.0,
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 25.0,
+      "custo_var_USD_MW": 25.0,
       "emissao_tCO2_MWh": 1.2,
       "Unidade": "MW"
     },
@@ -167,14 +163,12 @@
       "ID_Barra": "6",
       "Tipo": "GWD",
       "custo_curtailment_USD_MWh": 100.0,
-
-      
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 150.0,
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 30.0,
+      "custo_var_USD_MW": 30.0,
       "emissao_tCO2_MWh": 1.5,
       "Unidade": "MW"
     },
@@ -183,14 +177,12 @@
       "ID_Barra": "8",
       "Tipo": "GWD",
       "custo_curtailment_USD_MWh": 100.0,
-
-      
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 470.0,
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 35.0,
+      "custo_var_USD_MW": 35.0,
       "emissao_tCO2_MWh": 2.0,
       "Unidade": "MW"
     },
@@ -199,14 +191,12 @@
       "ID_Barra": "10",
       "Tipo": "GWD",
       "custo_curtailment_USD_MWh": 100.0,
-
-      
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 100.0,
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 40.0,
+      "custo_var_USD_MW": 40.0,
       "emissao_tCO2_MWh": 1.8,
       "Unidade": "MW"
     },
@@ -219,7 +209,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 45.0,
+      "custo_var_USD_MW": 45.0,
       "emissao_tCO2_MWh": 2.2,
       "Unidade": "MW"
     },
@@ -232,7 +222,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 50.0,
+      "custo_var_USD_MW": 50.0,
       "emissao_tCO2_MWh": 2.5,
       "Unidade": "MW"
     },
@@ -245,7 +235,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 55.0,
+      "custo_var_USD_MW": 55.0,
       "emissao_tCO2_MWh": 2.8,
       "Unidade": "MW"
     },
@@ -258,7 +248,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 60.0,
+      "custo_var_USD_MW": 60.0,
       "emissao_tCO2_MWh": 3.0,
       "Unidade": "MW"
     },
@@ -271,7 +261,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 65.0,
+      "custo_var_USD_MW": 65.0,
       "emissao_tCO2_MWh": 3.2,
       "Unidade": "MW"
     },
@@ -284,7 +274,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 70.0,
+      "custo_var_USD_MW": 70.0,
       "emissao_tCO2_MWh": 3.5,
       "Unidade": "MW"
     },
@@ -297,7 +287,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 75.0,
+      "custo_var_USD_MW": 75.0,
       "emissao_tCO2_MWh": 3.8,
       "Unidade": "MW"
     },
@@ -310,7 +300,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 80.0,
+      "custo_var_USD_MW": 80.0,
       "emissao_tCO2_MWh": 4.0,
       "Unidade": "MW"
     },
@@ -323,7 +313,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 85.0,
+      "custo_var_USD_MW": 85.0,
       "emissao_tCO2_MWh": 4.2,
       "Unidade": "MW"
     },
@@ -336,7 +326,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 90.0,
+      "custo_var_USD_MW": 90.0,
       "emissao_tCO2_MWh": 4.5,
       "Unidade": "MW"
     },
@@ -349,7 +339,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 95.0,
+      "custo_var_USD_MW": 95.0,
       "emissao_tCO2_MWh": 4.8,
       "Unidade": "MW"
     },
@@ -362,7 +352,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 100.0,
+      "custo_var_USD_MW": 100.0,
       "emissao_tCO2_MWh": 5.0,
       "Unidade": "MW"
     },
@@ -375,7 +365,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 105.0,
+      "custo_var_USD_MW": 105.0,
       "emissao_tCO2_MWh": 5.2,
       "Unidade": "MW"
     },
@@ -388,7 +378,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 110.0,
+      "custo_var_USD_MW": 110.0,
       "emissao_tCO2_MWh": 5.5,
       "Unidade": "MW"
     },
@@ -401,7 +391,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 115.0,
+      "custo_var_USD_MW": 115.0,
       "emissao_tCO2_MWh": 5.8,
       "Unidade": "MW"
     },
@@ -414,7 +404,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 120.0,
+      "custo_var_USD_MW": 120.0,
       "emissao_tCO2_MWh": 6.0,
       "Unidade": "MW"
     },
@@ -427,7 +417,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 125.0,
+      "custo_var_USD_MW": 125.0,
       "emissao_tCO2_MWh": 6.2,
       "Unidade": "MW"
     },
@@ -440,7 +430,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 130.0,
+      "custo_var_USD_MW": 130.0,
       "emissao_tCO2_MWh": 6.5,
       "Unidade": "MW"
     },
@@ -453,7 +443,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 135.0,
+      "custo_var_USD_MW": 135.0,
       "emissao_tCO2_MWh": 6.8,
       "Unidade": "MW"
     },
@@ -466,7 +456,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 140.0,
+      "custo_var_USD_MW": 140.0,
       "emissao_tCO2_MWh": 7.0,
       "Unidade": "MW"
     },
@@ -479,7 +469,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 145.0,
+      "custo_var_USD_MW": 145.0,
       "emissao_tCO2_MWh": 7.2,
       "Unidade": "MW"
     },
@@ -492,7 +482,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 150.0,
+      "custo_var_USD_MW": 150.0,
       "emissao_tCO2_MWh": 7.5,
       "Unidade": "MW"
     },
@@ -505,7 +495,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 155.0,
+      "custo_var_USD_MW": 155.0,
       "emissao_tCO2_MWh": 7.8,
       "Unidade": "MW"
     },
@@ -518,7 +508,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 160.0,
+      "custo_var_USD_MW": 160.0,
       "emissao_tCO2_MWh": 8.0,
       "Unidade": "MW"
     },
@@ -531,7 +521,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 165.0,
+      "custo_var_USD_MW": 165.0,
       "emissao_tCO2_MWh": 8.2,
       "Unidade": "MW"
     },
@@ -544,7 +534,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 170.0,
+      "custo_var_USD_MW": 170.0,
       "emissao_tCO2_MWh": 8.5,
       "Unidade": "MW"
     },
@@ -557,7 +547,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 175.0,
+      "custo_var_USD_MW": 175.0,
       "emissao_tCO2_MWh": 8.8,
       "Unidade": "MW"
     },
@@ -570,7 +560,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 180.0,
+      "custo_var_USD_MW": 180.0,
       "emissao_tCO2_MWh": 9.0,
       "Unidade": "MW"
     },
@@ -583,7 +573,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 185.0,
+      "custo_var_USD_MW": 185.0,
       "emissao_tCO2_MWh": 9.2,
       "Unidade": "MW"
     },
@@ -596,7 +586,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 190.0,
+      "custo_var_USD_MW": 190.0,
       "emissao_tCO2_MWh": 9.5,
       "Unidade": "MW"
     },
@@ -609,7 +599,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 195.0,
+      "custo_var_USD_MW": 195.0,
       "emissao_tCO2_MWh": 9.8,
       "Unidade": "MW"
     },
@@ -622,7 +612,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 200.0,
+      "custo_var_USD_MW": 200.0,
       "emissao_tCO2_MWh": 10.0,
       "Unidade": "MW"
     },
@@ -635,7 +625,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 205.0,
+      "custo_var_USD_MW": 205.0,
       "emissao_tCO2_MWh": 10.2,
       "Unidade": "MW"
     },
@@ -648,7 +638,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 210.0,
+      "custo_var_USD_MW": 210.0,
       "emissao_tCO2_MWh": 10.5,
       "Unidade": "MW"
     },
@@ -661,7 +651,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 215.0,
+      "custo_var_USD_MW": 215.0,
       "emissao_tCO2_MWh": 10.8,
       "Unidade": "MW"
     },
@@ -674,7 +664,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 220.0,
+      "custo_var_USD_MW": 220.0,
       "emissao_tCO2_MWh": 11.0,
       "Unidade": "MW"
     },
@@ -687,7 +677,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 225.0,
+      "custo_var_USD_MW": 225.0,
       "emissao_tCO2_MWh": 11.2,
       "Unidade": "MW"
     },
@@ -700,7 +690,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 230.0,
+      "custo_var_USD_MW": 230.0,
       "emissao_tCO2_MWh": 11.5,
       "Unidade": "MW"
     },
@@ -713,7 +703,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 235.0,
+      "custo_var_USD_MW": 235.0,
       "emissao_tCO2_MWh": 11.8,
       "Unidade": "MW"
     },
@@ -726,7 +716,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 240.0,
+      "custo_var_USD_MW": 240.0,
       "emissao_tCO2_MWh": 12.0,
       "Unidade": "MW"
     },
@@ -739,7 +729,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 245.0,
+      "custo_var_USD_MW": 245.0,
       "emissao_tCO2_MWh": 12.2,
       "Unidade": "MW"
     },
@@ -752,7 +742,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 250.0,
+      "custo_var_USD_MW": 250.0,
       "emissao_tCO2_MWh": 12.5,
       "Unidade": "MW"
     },
@@ -765,7 +755,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 255.0,
+      "custo_var_USD_MW": 255.0,
       "emissao_tCO2_MWh": 12.8,
       "Unidade": "MW"
     },
@@ -778,7 +768,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 260.0,
+      "custo_var_USD_MW": 260.0,
       "emissao_tCO2_MWh": 13.0,
       "Unidade": "MW"
     },
@@ -791,7 +781,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 265.0,
+      "custo_var_USD_MW": 265.0,
       "emissao_tCO2_MWh": 13.2,
       "Unidade": "MW"
     },
@@ -804,7 +794,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 270.0,
+      "custo_var_USD_MW": 270.0,
       "emissao_tCO2_MWh": 13.5,
       "Unidade": "MW"
     },
@@ -817,7 +807,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 275.0,
+      "custo_var_USD_MW": 275.0,
       "emissao_tCO2_MWh": 13.8,
       "Unidade": "MW"
     },
@@ -830,7 +820,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 280.0,
+      "custo_var_USD_MW": 280.0,
       "emissao_tCO2_MWh": 14.0,
       "Unidade": "MW"
     },
@@ -843,7 +833,7 @@
       "ramp_up_MW_h": 40.0,
       "ramp_down_MW_h": 40.0,
       "startup_USD": 100.0,
-      "custo_var_USD_MWh": 285.0,
+      "custo_var_USD_MW": 285.0,
       "emissao_tCO2_MWh": 14.2,
       "Unidade": "MW"
     }
@@ -2962,46 +2952,26 @@
     }
   ],
 
-  "CONTINGENCIAS": [
+  "BATERIAS": [
     {
-      "ID_Contingencia": "CTG-1",
-      "Descricao": "Base - Sem contingência",
-      "Linhas_Removidas": []
+      "ID_Bateria": "BAT1",
+      "ID_Barra": "20",
+      "Pmax_carga_MW": 10.0,
+      "Pmax_descarga_MW": 15.0,
+      "capacidade_armazenamento_MWh": 40.0,
+      "min_soc": 0.1,
+      "custo_carga_USD_MWh": 2.0,
+      "custo_descarga_USD_MWh": 2.0
     },
     {
-      "ID_Contingencia": "CTG-2",
-      "Descricao": "Remoção da linha 68-69 (conecta G69 - 1000 MW)",
-      "Linhas_Removidas": ["68-69"]
-    },
-    {
-      "ID_Contingencia": "CTG-3",
-      "Descricao": "Remoção da linha 54-59 (conecta G54 - 570 MW)",
-      "Linhas_Removidas": ["54-59"]
-    },
-    {
-      "ID_Contingencia": "CTG-4",
-      "Descricao": "Remoção da linha 15-17 (conecta G15 - 450 MW)",
-      "Linhas_Removidas": ["15-17"]
-    },
-    {
-      "ID_Contingencia": "CTG-5",
-      "Descricao": "Remoção da linha 49-66 (conecta G49 - 450 MW)",
-      "Linhas_Removidas": ["49-66"]
-    },
-    {
-      "ID_Contingencia": "CTG-6",
-      "Descricao": "Remoção da linha 83-85 (conecta G85 - 300 MW)",
-      "Linhas_Removidas": ["83-85"]
-    },
-    {
-      "ID_Contingencia": "CTG-7",
-      "Descricao": "Remoção da linha 89-90 (conecta G90 - 250 MW)",
-      "Linhas_Removidas": ["89-90"]
-    },
-    {
-      "ID_Contingencia": "CTG-8",
-      "Descricao": "Remoção da linha 23-24 (conecta G24 - 250 MW)",
-      "Linhas_Removidas": ["23-24"]
+      "ID_Bateria": "BAT2",
+      "ID_Barra": "50",
+      "Pmax_carga_MW": 10.0,
+      "Pmax_descarga_MW": 15.0,
+      "capacidade_armazenamento_MWh": 60.0,
+      "min_soc": 0.1,
+      "custo_carga_USD_MWh": 2.5,
+      "custo_descarga_USD_MWh": 2.5
     }
   ]
 }
