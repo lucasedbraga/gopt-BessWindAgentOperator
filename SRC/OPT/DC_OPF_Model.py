@@ -113,9 +113,9 @@ class DC_OPF_Model:
     def add_constraints(self):
         """Adiciona todas as restrições ao modelo"""
         # Importar módulos de restrições
-        from SRC.SOLVER.RES.EletricConstraints import DCElectricConstraints
-        from SRC.SOLVER.RES.WindGeneratorConstraints import WindGeneratorConstraints
-        from SRC.SOLVER.RES.BatteryConstraints import BatteryConstraints
+        from SOLVER.RES.EletricConstraints import DCElectricConstraints
+        from SOLVER.RES.WindGeneratorConstraints import WindGeneratorConstraints
+        from SOLVER.RES.BatteryConstraints import BatteryConstraints
         
 
         if len(self.model.GWD_GENERATORS) > 0:
@@ -210,8 +210,8 @@ class DC_OPF_Model:
         PGER_val = [value(m.PGER[g]) for g in m.GENERATORS]
         PGWIND = [value(m.PGWIND[g]) for g in m.GWD_GENERATORS]
         CURTAILMENT = [value(m.CURTAILMENT[g]) for g in m.GWD_GENERATORS]
-        SOC_init = [value(m.SOC_init[b]) for b in m.BATTERIES]
-        SOC_atual = [value(m.SOC_atual[b]) for b in m.BATTERIES]
+        SOC_init = [value(m.SOC_init[b]) if b in m.BATTERIES else 0 for b in m.BUSES]
+        SOC_atual = [value(m.SOC_atual[b]) if b in m.BATTERIES else 0 for b in m.BUSES]
         DEFICIT = [value(m.DEFICIT[b]) for b in m.BUSES]
 
         V = [value(m.V[b]) for b in m.BUSES]

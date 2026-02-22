@@ -156,5 +156,5 @@ class BatteryPlotter:
 
 if __name__ == '__main__':
     # Exemplo de teste rápido (substitua pelo cen_id desejado)
-    plotter = BatteryPlotter(cen_id='20260222172151')  # Exemplo
+    plotter = BatteryPlotter(cen_id='20260222181450')  # Exemplo
     plotter.plot_all_batteries()

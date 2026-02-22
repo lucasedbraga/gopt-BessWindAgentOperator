@@ -181,7 +181,7 @@ class MultiDayOPFModel:
                 res = opf.extract_results(results_pyomo)
                 soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0]*n_bat
                 # Atualiza SOC inicial
-                self.sistema.SOC_init = self.atualizar_soc_inicial(soc_atual)
+                self.sistema.SOC_init = soc_atual
 
                 # Cria o snapshot de resultado
                 snapshot = MultiDayOPFSnapshotResult(
