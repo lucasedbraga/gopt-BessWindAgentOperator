@@ -33,20 +33,20 @@ class BatteryPlotter:
         """Carrega os dados de bateria da tabela DBAR_results e adiciona coluna de operação."""
         try:
             conn = sqlite3.connect(self.db_path)
-            # Consulta para obter registros de barras que possuem dados de bateria (PBESS_inst_result não nulo)
+            # Consulta adaptada para a nova estrutura da tabela DBAR_results
             query = """
                 SELECT 
                     cen_id,
                     data_simulacao,
                     hora_simulacao,
                     BAR_id AS barra_bess,
-                    PBESS_inst_result AS potencia_bess_mw,
-                    PBESS_soc_result AS soc_percent
+                    BESS_init_cenario,
+                    BESS_operation_result,
+                    BESS_soc_atual_result
                 FROM DBAR_results
-                WHERE PBESS_inst_result IS NOT NULL OR PBESS_soc_result IS NOT NULL
             """
             if self.cen_id is not None:
-                query += f" AND cen_id = '{self.cen_id}'"
+                query += f" WHERE cen_id = '{self.cen_id}'"
             query += " ORDER BY cen_id, data_simulacao, hora_simulacao, BAR_id;"
 
             df = pd.read_sql_query(query, conn)
@@ -65,11 +65,7 @@ class BatteryPlotter:
                 else:
                     return 'idle'
 
-            df['operacao'] = df['potencia_bess_mw'].apply(classificar_operacao)
-
-            # Converter SOC para percentual (já deve estar, mas garantir)
-            # Se necessário, pode-se assegurar que está entre 0 e 100
-            df['soc_percent'] = df['soc_percent'].clip(0, 100)
+            df['operacao'] = df['BESS_operation_result'].apply(classificar_operacao)
 
             return df
 
@@ -86,8 +82,10 @@ class BatteryPlotter:
             return
 
         df_bat = self.df[self.df['barra_bess'] == barra_bess].copy()
-        if sum(df_bat['soc_percent']) == 0:
-            print(f"⚠️  Nenhum registro para a bateria na barra {barra_bess}.")
+
+        # Verifica se a bateria teve alguma operação (potência não nula)
+        if (df_bat['BESS_operation_result'].abs() <= 0.001).all():
+            print(f"⚠️  Bateria na barra {barra_bess} não teve operação (todos os valores de potência ≈ 0).")
             return
 
         # Ordenar por hora (dentro de cada dia, se houver múltiplos dias, pode ser necessário concatenar)
@@ -97,8 +95,9 @@ class BatteryPlotter:
         df_bat = df_bat.head(24)  # Ajuste conforme necessidade
 
         horas = df_bat['hora_simulacao'].values
-        potencia = df_bat['potencia_bess_mw'].values
-        soc = df_bat['soc_percent'].values
+        soc_init = df_bat['BESS_init_cenario'].values
+        BESS_operation = df_bat['BESS_operation_result'].values
+        soc_atual = df_bat['BESS_soc_atual_result'].values
         operacao = df_bat['operacao'].values
 
         # Mapeamento de cores (mantido igual)
@@ -116,7 +115,7 @@ class BatteryPlotter:
         fig, ax1 = plt.subplots(figsize=(14, 6))
 
         # Barras de potência
-        bars = ax1.bar(horas, potencia, color=cores, alpha=0.7, label='Potência (MW)')
+        bars = ax1.bar(horas, BESS_operation, color=cores, alpha=0.7, label='Potência (MW)')
         ax1.axhline(0, color='black', linewidth=0.8, linestyle='--')
         ax1.set_ylabel('Potência (MW)', fontsize=12)
         ax1.set_xlabel('Hora do dia', fontsize=12)
@@ -126,7 +125,8 @@ class BatteryPlotter:
 
         # Eixo secundário para SOC (twinx)
         ax2 = ax1.twinx()
-        ax2.plot(horas, soc, color='gray', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC (%)')
+        ax2.plot(horas, soc_init, color='green', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC Inicial (%)')
+        ax2.plot(horas, soc_atual, color='gray', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC Atual (%)')
         ax2.set_ylabel('SOC (%)', fontsize=12)
         #ax2.set_ylim(0, 105)
 
@@ -156,5 +156,5 @@ class BatteryPlotter:
 
 if __name__ == '__main__':
     # Exemplo de teste rápido (substitua pelo cen_id desejado)
-    plotter = BatteryPlotter(cen_id='20250220120000')  # Exemplo
+    plotter = BatteryPlotter(cen_id='20260222172151')  # Exemplo
     plotter.plot_all_batteries()

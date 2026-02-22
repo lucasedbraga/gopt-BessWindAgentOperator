@@ -36,27 +36,25 @@ class OPF_DBHandler:
             timestamp TEXT,
             data_simulacao TEXT,
             hora_simulacao INTEGER,
-            sucesso INTEGER,
-            custo_total REAL,
-            deficit_total REAL,
-            curtailment_total REAL,
-            perdas_total REAL,
-            carga_total REAL,
-            eolica_disponivel REAL,
-            eolica_utilizada REAL,
-            fator_vento REAL,
-            iteracoes INTEGER,
+            sucesso INTEGER,  
             tempo_execucao REAL,
             solver_cenario TEXT,
+
             sistema_cenario TEXT,
+            fator_vento_cenario REAL,
             PLOAD_cenario TEXT,
-            PG_result TEXT,
+            BESS_soc_init_cenario TEXT,
+                       
+            PGER_result TEXT,
+            PGWIND_result TEXT,
+            CURTAILMENT_result TEXT,
+            BESS_operation_result TEXT,
+            BESS_soc_atual_result TEXT,
+ 
+                                
             V_result TEXT,
             ANG_result TEXT,
-            PBESS_soc_result TEXT,
-            BESS_operation_result TEXT,
-            PCURWIND_result TEXT,
-            FluxLIN_result TEXT,
+            FluxLIN_result TEXT,                       
             UNIQUE(cen_id, data_simulacao, hora_simulacao)
         )
         ''')
@@ -77,15 +75,19 @@ class OPF_DBHandler:
                        
             PLOAD_cenario REAL,
             QLOAD_cenario REAL,
+            BESS_init_cenario REAL,
+                       
             PGER_total_result REAL,
+            PGWIND_total_result REAL,
+            PCURTAILMENT_total_result REAL,
+            BESS_operation_result REAL,
+            BESS_soc_atual_result REAL,
             PLOSS_result REAL,
             PDEF_result REAL,
+                       
             V_result REAL,
             ANG_result REAL,
-            PBESS_inst_result REAL,
-            PBESS_soc_result REAL,
-            CMO_result REAL,
-                       
+                                              
             FOREIGN KEY (cen_id, data_simulacao, hora_simulacao) REFERENCES resultados_opf(cen_id, data_simulacao, hora_simulacao)
         )
         ''')
@@ -154,45 +156,18 @@ class OPF_DBHandler:
         timestamp = datetime.now().isoformat()
         SB = sistema.SB
 
-        # ----- Métricas gerais -----
-        carga_total = np.sum(sistema.PLOAD) * SB
-        capacidade_eolica = sum(sistema.PGMAX_EFETIVO[g] for g in sistema.BAR_GWD) * SB
-
-        eolica_utilizada = 0.0
-        for g_idx in sistema.BAR_GWD:
-            if g_idx < len(resultado.PG):
-                eolica_utilizada += resultado.PG[g_idx] * SB
-
         # ----- Preparação dos campos JSON -----
-        pg_result_json = json.dumps([float(x) for x in resultado.PG]) if hasattr(resultado, 'PG') else '[]'
+       
+        pg_result_json = json.dumps([float(x) for x in resultado.PGER]) if hasattr(resultado, 'PGER') else '[]'
+        pgwind_result_json = json.dumps([float(x) for x in resultado.PGWIND]) if hasattr(resultado, 'PGWIND') else '[]'
+        curtailment_result_json = json.dumps([float(x) for x in resultado.CURTAILMENT]) if hasattr(resultado, 'CURTAILMENT') else '[]'
+        BESS_soc_init_json = json.dumps([float(x) for x in resultado.SOC_init]) if hasattr(resultado, 'SOC_init') else '[]'
+        BESS_operation_json = json.dumps([float(x) for x in resultado.BESS_operation]) if hasattr(resultado, 'BESS_operation') else '[]'
+        BESS_soc_atual_json = json.dumps([float(x) for x in resultado.SOC_atual]) if hasattr(resultado, 'SOC_atual') else '[]'
+        
         v_result_json = json.dumps([float(x) for x in resultado.V]) if hasattr(resultado, 'V') else '[]'
         ang_result_json = json.dumps([float(x) for x in resultado.ANG]) if hasattr(resultado, 'ANG') else '[]'
-
-        # BESS SOC (pode ser dict ou lista)
-        bess_soc_json = '[]'
-        if hasattr(resultado, 'SOC') and resultado.SOC is not None:
-            if isinstance(resultado.SOC, dict):
-                bess_soc_json = json.dumps({str(k): float(v) for k, v in resultado.SOC.items()})
-            else:
-                bess_soc_json = json.dumps([float(x) for x in resultado.SOC])
-
-        # BESS operation
-        bess_op_json = '[]'
-        if hasattr(resultado, 'BATTERY_OPERATION') and resultado.BATTERY_OPERATION is not None:
-            if isinstance(resultado.BATTERY_OPERATION, dict):
-                bess_op_json = json.dumps({str(k): v for k, v in resultado.BATTERY_OPERATION.items()})
-            else:
-                bess_op_json = json.dumps([str(x) for x in resultado.BATTERY_OPERATION])
-
-        # Curtailment eólico
-        pcurwind_json = '[]'
-        if hasattr(resultado, 'CURTAILMENT') and resultado.CURTAILMENT is not None:
-            pcurwind_json = json.dumps([float(x) for x in resultado.CURTAILMENT])
-
-        # Fluxos nas linhas
-        fluxlin_json = '[]'
-        if hasattr(resultado, 'FLUXO') and resultado.FLUXO is not None:
-            fluxlin_json = json.dumps([float(x) for x in resultado.FLUXO])
+        fluxlin_json = json.dumps([float(x) for x in resultado.FLUXO_LIN]) if hasattr(resultado, 'FLUXO_LIN') else '[]'
 
         # ----- Inserção na tabela principal (resultados_opf) -----
         cursor.execute('''
@@ -202,51 +177,26 @@ class OPF_DBHandler:
             data_simulacao,
             hora_simulacao,
             sucesso,
-            custo_total,
-            deficit_total,
-            curtailment_total,
-            perdas_total,
-            carga_total,
-            eolica_disponivel,
-            eolica_utilizada,
-            fator_vento,
-            iteracoes,
             tempo_execucao,
             solver_cenario,
+                       
             sistema_cenario,
+            fator_vento_cenario,
             PLOAD_cenario,
-            PG_result,
+            BESS_soc_init_cenario,
+                       
+            PGER_result,
+            PGWIND_result,
+            CURTAILMENT_result,
+            BESS_operation_result,
+            BESS_soc_atual_result,
+
+                       
             V_result,
             ANG_result,
-            PBESS_soc_result,
-            BESS_operation_result,
-            PCURWIND_result,
             FluxLIN_result
             )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(cen_id, data_simulacao, hora_simulacao) DO UPDATE SET
-            timestamp = excluded.timestamp,
-            sucesso = excluded.sucesso,
-            custo_total = excluded.custo_total,
-            deficit_total = excluded.deficit_total,
-            curtailment_total = excluded.curtailment_total,
-            perdas_total = excluded.perdas_total,
-            carga_total = excluded.carga_total,
-            eolica_disponivel = excluded.eolica_disponivel,
-            eolica_utilizada = excluded.eolica_utilizada,
-            fator_vento = excluded.fator_vento,
-            iteracoes = excluded.iteracoes,
-            tempo_execucao = excluded.tempo_execucao,
-            solver_cenario = excluded.solver_cenario,
-            sistema_cenario = excluded.sistema_cenario,
-            PLOAD_cenario = excluded.PLOAD_cenario,
-            PG_result = excluded.PG_result,
-            V_result = excluded.V_result,
-            ANG_result = excluded.ANG_result,
-            PBESS_soc_result = excluded.PBESS_soc_result,
-            BESS_operation_result = excluded.BESS_operation_result,
-            PCURWIND_result = excluded.PCURWIND_result,
-            FluxLIN_result = excluded.FluxLIN_result
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', 
             (
                 cen_id,
@@ -254,25 +204,23 @@ class OPF_DBHandler:
                 dia,
                 int(hora),
                 int(resultado.sucesso),
-                float(resultado.custo_total),
-                float(sum(resultado.DEFICIT) * SB) if hasattr(resultado, 'DEFICIT') else 0.0,
-                float(sum(resultado.CURTAILMENT) * SB) if hasattr(resultado, 'CURTAILMENT') else 0.0,
-                float(resultado.perdas * SB) if hasattr(resultado, 'perdas') else 0.0,
-                float(carga_total),
-                float(capacidade_eolica),
-                float(eolica_utilizada),
-                float(perfil_eolica),
-                int(resultado.iteracoes) if hasattr(resultado, 'iteracoes') else 0,
                 float(getattr(resultado, 'tempo_execucao', 0.0)),
                 solver_name,
+
                 sistema.json_file_path if hasattr(sistema, 'json_file_path') else 'unknown',
-                float(perfil_carga),                     # PLOAD_cenario
+                float(perfil_eolica),
+                float(perfil_carga),
+                BESS_soc_init_json,
+
+
                 pg_result_json,
+                pgwind_result_json,
+                curtailment_result_json,
+                BESS_operation_json,
+                BESS_soc_atual_json,
+
                 v_result_json,
                 ang_result_json,
-                bess_soc_json,
-                bess_op_json,
-                pcurwind_json,
                 fluxlin_json
             )
         )
@@ -290,26 +238,39 @@ class OPF_DBHandler:
             # Geração total na barra
             geracao_barra = 0.0
             for g_idx, barra_idx in enumerate(sistema.BARPG):
-                if barra_idx == i and g_idx < len(resultado.PG):
-                    geracao_barra += resultado.PG[g_idx] * SB
+                if barra_idx == i and g_idx < len(resultado.PGER):
+                    geracao_barra += resultado.PGER[g_idx] * SB
 
+            # Geração eólica na barra
+            geracao_gwind_barra = 0.0
+            for g_idx in sistema.BAR_GWD:
+                if g_idx == i and g_idx < len(resultado.PGER):
+                    geracao_gwind_barra += resultado.PGER[g_idx] * SB
+
+            # Curtailment eólico na barra
+            curtailment_barra = 0.0
+            for idx_gwd, barra_gwd in enumerate(sistema.BAR_GWD):
+                if barra_gwd == i:
+                    if hasattr(resultado, 'CURTAILMENT') and idx_gwd < len(resultado.CURTAILMENT):
+                        curtailment_barra += resultado.CURTAILMENT[idx_gwd] * SB
+                    
+            # Perdas na barra (estimativa)
+            perdas_barra = 0.0
+            for e_idx in range(sistema.NLIN):
+                if sistema.line_fr[e_idx] == i or sistema.line_to[e_idx] == i:
+                    r = sistema.r_line[e_idx]
+                    fluxo = resultado.FLUXO_LIN[e_idx] if e_idx < len(resultado.FLUXO_LIN) else 0.0
+                    perdas_barra += r * (fluxo ** 2) * SB
+
+            # Déficit na barra (se houver)      
             deficit_barra = resultado.DEFICIT[i] * SB if i < len(resultado.DEFICIT) else 0.0
             v_barra = resultado.V[i] if i < len(resultado.V) else 0.0
             ang_barra = resultado.ANG[i] * 180 / np.pi if i < len(resultado.ANG) else 0.0
 
-            # BESS na barra (se houver)
-            pbess_inst = 0.0
-            pbess_soc = 0.0
-            for idx_bess, barra_bess in enumerate(sistema.BARRAS_COM_BATERIA):
-                if barra_bess == i:
-                    if hasattr(resultado, 'BATTERY_POWER') and idx_bess < len(resultado.BATTERY_POWER):
-                        pbess_inst = resultado.BATTERY_POWER[barra_bess] * SB
-                    if hasattr(resultado, 'SOC'):
-                        if isinstance(resultado.SOC, (list, tuple)) and idx_bess < len(resultado.SOC):
-                            pbess_soc = resultado.SOC[barra_bess]
-                    break
-
-            cmo = resultado.cmo_total if hasattr(resultado, 'cmo_total') else 0.0
+            # BESS na barra (índice i)
+            pbess_soc_init = resultado.SOC_init[i] if i < len(resultado.SOC_init) else 0.0
+            pbess_soc_operation = resultado.BESS_operation[i] if i < len(resultado.BESS_operation) else 0.0
+            pbess_soc_atual = resultado.SOC_atual[i] if i < len(resultado.SOC_atual) else 0.0
 
             cursor.execute('''
             INSERT INTO DBAR_results (
@@ -317,44 +278,45 @@ class OPF_DBHandler:
                 timestamp,
                 data_simulacao,
                 hora_simulacao,
-                           
                 BAR_id,
                 BAR_tipo,
                 PLOAD_cenario,
                 QLOAD_cenario,
+                BESS_init_cenario,
                 PGER_total_result,
+                PGWIND_total_result,
+                PCURTAILMENT_total_result,
+                BESS_operation_result,
+                BESS_soc_atual_result,
                 PLOSS_result,
                 PDEF_result,
                 V_result,
-                ANG_result,
-                PBESS_inst_result,
-                PBESS_soc_result,
-                CMO_result
+                ANG_result
             ) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', 
-                (
-                    cen_id,
-                    timestamp,
-                    dia,
-                    int(hora),
-                    barra_id,
-                    tipo_barra,
-                    float(sistema.PLOAD[i] * SB),
-                    float(sistema.QLOAD[i] * SB) if i < len(sistema.QLOAD) else 0.0,
-                    float(geracao_barra),
-                    0.0,
-                    float(deficit_barra),
-                    float(v_barra),
-                    float(ang_barra),
-                    float(pbess_inst),
-                    float(pbess_soc),
-                    float(cmo)
-                )
-            )
-
+            (
+                cen_id,
+                timestamp,
+                dia,
+                int(hora),
+                barra_id,
+                tipo_barra,
+                float(sistema.PLOAD[i] * SB),
+                float(sistema.QLOAD[i] * SB) if i < len(sistema.QLOAD) else 0.0,
+                float(pbess_soc_init),           # BESS_init_cenario
+                float(geracao_barra),             # PGER_total_result
+                float(geracao_gwind_barra),       # PGWIND_total_result
+                float(curtailment_barra),         # PCURTAILMENT_total_result
+                float(pbess_soc_operation),       # BESS_operation_result
+                float(pbess_soc_atual),           # BESS_soc_atual_result
+                float(perdas_barra),              # PLOSS_result
+                float(deficit_barra),             # PDEF_result
+                float(v_barra),                   # V_result
+                float(ang_barra)                   # ANG_result
+            ))
         # ----- Detalhes por gerador (DGER_results) -----
-        for g_idx in range(len(resultado.PG)):
+        for g_idx in range(len(resultado.PGER)):
             if g_idx < len(sistema.BARPG):
                 barra_idx = sistema.BARPG[g_idx]
                 barra_id = sistema.indice_para_barra[barra_idx]
@@ -365,7 +327,7 @@ class OPF_DBHandler:
                 pgwind = 0.0
                 pcwind = 0.0
                 if g_idx in sistema.BAR_GWD:
-                    pgwind = resultado.PG[g_idx] * SB
+                    pgwind = resultado.PGER[g_idx] * SB
                     idx_gwd = sistema.BAR_GWD.index(g_idx)
                     if hasattr(resultado, 'CURTAILMENT') and idx_gwd < len(resultado.CURTAILMENT):
                         pcwind = resultado.CURTAILMENT[idx_gwd] * SB
@@ -398,7 +360,7 @@ class OPF_DBHandler:
                         barra_id,
                         tipo_gerador,
                         float(custo_ger),
-                        float(resultado.PG[g_idx] * SB),
+                        float(resultado.PGER[g_idx] * SB),
                         float(sistema.PGMAX[g_idx] * SB) if g_idx < len(sistema.PGMAX) else 0.0,
                         float(sistema.PGMIN[g_idx] * SB) if g_idx < len(sistema.PGMIN) else 0.0,
                         float(pgwind),
@@ -407,17 +369,17 @@ class OPF_DBHandler:
                 )
 
         # ----- Detalhes por linha (DLIN_results) -----
-        for e_idx in range(len(resultado.FLUXO)):
+        for e_idx in range(len(resultado.FLUXO_LIN)):
             if e_idx < sistema.NLIN:
                 de_barra = sistema.indice_para_barra[sistema.line_fr[e_idx]]
                 para_barra = sistema.indice_para_barra[sistema.line_to[e_idx]]
 
-                fluxo_mw = resultado.FLUXO[e_idx] * SB
+                fluxo_mw = resultado.FLUXO_LIN[e_idx] * SB
                 limite_mw = sistema.FLIM[e_idx] * SB
                 carregamento = abs(fluxo_mw / limite_mw * 100) if limite_mw > 0 else 0.0
 
                 r = sistema.r_line[e_idx]
-                perdas_mw = r * (resultado.FLUXO[e_idx] ** 2) * SB
+                perdas_mw = r * (resultado.FLUXO_LIN[e_idx] ** 2) * SB
 
                 cursor.execute('''
                 INSERT INTO DLIN_results (

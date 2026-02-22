@@ -142,7 +142,7 @@ class MultiDayOPFModel:
                 results_pyomo = solver_pyomo.solve(opf.model, tee=False)
                 
                 res = opf.extract_results(results_pyomo)
-                soc_atual = res.SOC.copy() if res.SOC else 0.0
+                soc_atual = res.SOC_atual.copy() if res.SOC_atual else 0.0
 
                 resultados.append(MultiDayOPFSnapshotResult(
                     dia=dia,

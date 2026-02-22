@@ -12,25 +12,28 @@ class MultiDayOPFSnapshotResult:
     dia: int
     hora: int
     sucesso: bool
-    PG: List[float]
-    ANG: List[float]
-    FLUXO: List[float]
-    DEFICIT: List[float]
-    CURTAILMENT: List[float]
-    custo_total: float
-    deficit_total: float
-    curtailment_total: float
-    cmo_total: float
-    perdas: float
-    SOC: List[float] = field(default_factory=list)
-    BATTERY_OPERATION: List[str] = field(default_factory=list)
-    BATTERY_POWER: List[float] = field(default_factory=list)
+
+    PGER: List[float] = field(default_factory=list)
+    PGWIND: List[float] = field(default_factory=list)
+    CURTAILMENT: List[float] = field(default_factory=list)
+    SOC_init: List[float] = field(default_factory=list)
+    BESS_operation: List[float] = field(default_factory=list)
+    SOC_atual: List[float] = field(default_factory=list)
+    DEFICIT: List[float] = field(default_factory=list)
+
+    V: List[float] = field(default_factory=list)
+    ANG: List[float] = field(default_factory=list)
+    FLUXO_LIN: List[float] = field(default_factory=list)
+
+    CUSTO: List[float] = field(default_factory=list)
+    CMO: List[float] = field(default_factory=list)
+    PERDAS: List[float] = field(default_factory=list)
+
     mensagem: str = ""
     timestamp: Optional[datetime] = None
-    iteracoes: int = 1
     tempo_execucao: float = 0.0
-    # Campo V adicionado para compatibilidade com o DBHandler (padrão 1.0 pu)
-    V: List[float] = field(default_factory=list)
+
+
 
 @dataclass
 class MultiDayOPFResult:
@@ -114,12 +117,7 @@ class MultiDayOPFModel:
         if self.db_handler is not None and cen_id is not None:
             resultados = self.extract_results()
             for snap in resultados.snapshots:
-                # Garantir que o campo V exista (padrão 0.0 pu)
-                if not hasattr(snap, 'V') or not snap.V:
-                    snap.V = [0.0] * self.sistema.NBAR
                 dia_str = f"{snap.dia+1}"
-                # No modelo acoplado, os fatores de carga/vento não variam dinamicamente.
-                # Usamos 1.0 como fallback; se necessário, ajuste conforme seus dados.
                 perfil_carga = 1.0
                 perfil_vento = 1.0
                 self.db_handler.save_hourly_result(
@@ -133,6 +131,20 @@ class MultiDayOPFModel:
                     cen_id=cen_id
                 )
         return self._raw_results
+    
+    def atualizar_soc_inicial(self, soc_atual):
+        """
+        Atualiza o SOC inicial do sistema com base nos valores atuais das baterias.
+        
+        Args:
+            soc_atual (list ou array): Valores de SOC para cada bateria na mesma ordem de BARRAS_COM_BATERIA.
+        """
+        import numpy as np
+        soc_atual = np.array(soc_atual)
+        barras_bateria = self.sistema.BARRAS_COM_BATERIA  # lista de índices
+        novo_soc = np.zeros_like(self.sistema.BATTERY_MIN_SOC)
+        novo_soc[barras_bateria] = soc_atual
+        return novo_soc
 
     def solve_multiday_sequencial(self, solver_name='glpk', fator_carga=None, fator_vento=None,
                                   soc_inicial=None, cen_id=None):
@@ -143,7 +155,7 @@ class MultiDayOPFModel:
         """
         resultados = []
         n_bat = len(self.sistema.BARRAS_COM_BATERIA)
-        soc_atual = soc_inicial if soc_inicial is not None else [0.0]*n_bat
+        self.sistema.SOC_init = soc_inicial if soc_inicial is not None else [0.0]*n_bat
         # Salva os valores originais para restaurar depois
         PLOAD_original = self.sistema.PLOAD.copy()
         PGMAX_EFETIVO_original = self.sistema.PGMAX_EFETIVO.copy() if hasattr(self.sistema, 'PGMAX_EFETIVO') else None
@@ -157,9 +169,7 @@ class MultiDayOPFModel:
                 if fator_vento is not None:
                     for g_idx in self.sistema.BAR_GWD:
                         self.sistema.PGMAX_EFETIVO[g_idx] = self.sistema.PGMAX[g_idx] * fator_vento[dia, h]
-                # Atualiza SOC inicial
-                self.sistema.BATTERY_INITIAL_SOC = soc_atual
-
+                        
                 opf = DC_OPF_Model()
                 opf.build(self.sistema, considerar_perdas=True)
                 solver = DC_OPF_EconomicDispatch_Solver(self.sistema)
@@ -169,31 +179,36 @@ class MultiDayOPFModel:
                 results_pyomo = solver_pyomo.solve(opf.model, tee=False)
 
                 res = opf.extract_results(results_pyomo)
-                soc_atual = res.SOC.copy() if res.SOC else [0.0]*n_bat
+                soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0]*n_bat
+                # Atualiza SOC inicial
+                self.sistema.SOC_init = self.atualizar_soc_inicial(soc_atual)
 
                 # Cria o snapshot de resultado
                 snapshot = MultiDayOPFSnapshotResult(
                     dia=dia,
                     hora=h,
                     sucesso=res.sucesso,
-                    PG=res.PG,
-                    ANG=res.ANG,
-                    FLUXO=res.FLUXO,
-                    DEFICIT=res.DEFICIT,
+
+                    PGER=res.PGER,
+                    PGWIND=res.PGWIND,
                     CURTAILMENT=res.CURTAILMENT,
-                    custo_total=res.custo_total,
-                    deficit_total=sum(res.DEFICIT) if res.DEFICIT else 0.0,
-                    curtailment_total=res.curtailment_total,
-                    cmo_total=res.cmo_total,
-                    perdas=res.perdas,
-                    SOC=res.SOC,
-                    BATTERY_OPERATION=res.BATTERY_OPERATION,
-                    BATTERY_POWER=res.BATTERY_POWER,
+                    SOC_init=res.SOC_init,
+                    BESS_operation=res.BESS_operation,
+                    SOC_atual=res.SOC_atual,
+                    DEFICIT=res.DEFICIT,
+
+                    V=res.V,
+                    ANG=res.ANG,
+                    FLUXO_LIN= res.FLUXO_LIN,
+                   
+                    CUSTO=res.CUSTO,
+                    CMO=res.CMO,
+                    PERDAS=res.PERDAS,
+
                     mensagem=res.mensagem,
                     timestamp=res.timestamp,
-                    iteracoes=getattr(res, 'iteracoes', 1),
                     tempo_execucao=getattr(res, 'tempo_execucao', 0.0),
-                    V=[1.0] * self.sistema.NBAR  # Adiciona tensão padrão (modelo DC)
+
                 )
                 resultados.append(snapshot)
 
@@ -232,65 +247,65 @@ class MultiDayOPFModel:
                 block = self.model.snapshots[dia].hours[h]
                 opf_model = block.opf
                 try:
-                    PG = [float(opf_model.PG[g].value) for g in opf_model.GENERATORS] if hasattr(opf_model, 'PG') else []
+                    PGER = [float(opf_model.PG[g].value) for g in opf_model.GENERATORS] if hasattr(opf_model, 'PG') else []
+                    PGWIND = [float(opf_model.PG[g].value) for g in opf_model.BAR_GWD] if hasattr(opf_model, 'PG') else []
+                    CURTAILMENT = [float(opf_model.CURTAILMENT[g].value) for g in opf_model.GWD_GENERATORS] if hasattr(opf_model, 'CURTAILMENT') else []
+                    SOC_init = [self.sistema.BATTERY_INITIAL_SOC[idx] if idx < len(self.sistema.BATTERY_INITIAL_SOC) else 0.0 for idx in range(len(self.sistema.BARRAS_COM_BATERIA))]
+                    BATTERY_OPERATION = []
+                    SOC_atual = [block.SOC[idx].value if hasattr(block, 'SOC') else None for idx in range(len(self.sistema.BARRAS_COM_BATERIA))]
+                    DEFICIT = [float(opf_model.DEFICIT[b].value) for b in opf_model.BUSES] if hasattr(opf_model, 'DEFICIT') else []
+                    
+                    V = [float(opf_model.V[b].value) for b in opf_model.BUSES] if hasattr(opf_model, 'V') else []
                     ANG = [float(opf_model.ANG[b].value) for b in opf_model.BUSES] if hasattr(opf_model, 'ANG') else []
                     FLUXO = [float(opf_model.FLUXO[e].value) for e in opf_model.LINES] if hasattr(opf_model, 'FLUXO') else []
-                    DEFICIT = [float(opf_model.DEFICIT[b].value) for b in opf_model.BUSES] if hasattr(opf_model, 'DEFICIT') else []
-                    CURTAILMENT = [float(opf_model.CURTAILMENT[g].value) for g in opf_model.GWD_GENERATORS] if hasattr(opf_model, 'CURTAILMENT') else []
-                    custo_total = float(opf_model.obj()) if hasattr(opf_model, 'obj') else 0.0
-                    deficit_total = sum(DEFICIT)
-                    curtailment_total = sum(CURTAILMENT)
-                    cmo_total = 0.0  # Pode ser ajustado se dual disponível
-                    perdas = 0.0  # Pode ser ajustado se perdas disponíveis
-                    SOC = [block.SOC[idx].value if hasattr(block, 'SOC') else None for idx in range(len(self.sistema.BARRAS_COM_BATERIA))]
-                    operacao = []
-                    potencia_bess_mw = []
+                   
+                    CUSTO = []
+                    CMO = []
+                    PERDAS = []
+
                     for idx in range(len(self.sistema.BARRAS_COM_BATERIA)):
                         charge = opf_model.CHARGE[idx].value if hasattr(opf_model, 'CHARGE') else 0.0
                         discharge = opf_model.DISCHARGE[idx].value if hasattr(opf_model, 'DISCHARGE') else 0.0
-                        if charge > 0.01:
-                            operacao.append('charge')
-                        elif discharge > 0.01:
-                            operacao.append('discharge')
-                        else:
-                            operacao.append('idle')
                         pot_inst_bess = charge - discharge
-                        potencia_bess_mw.append(pot_inst_bess)
+                        BATTERY_OPERATION.append(pot_inst_bess)
 
-                    # Tensão padrão para modelo DC (1.0 pu)
-                    V = [1.0] * len(opf_model.BUSES) if hasattr(opf_model, 'BUSES') else [1.0] * self.sistema.NBAR
 
                     sucesso = True
                     mensagem = ""
                 except Exception as e:
-                    PG = ANG = FLUXO = DEFICIT = CURTAILMENT = SOC = operacao = potencia_bess_mw = V = []
-                    custo_total = deficit_total = curtailment_total = cmo_total = perdas = 0.0
+                    PGER = PGWIND = DEFICIT = CURTAILMENT = SOC_init = SOC_atual = BATTERY_OPERATION = []
+                    V = ANG = FLUXO_LIN = []
+                    CUSTO = CMO = PERDAS = []
                     sucesso = False
                     mensagem = str(e)
 
-                resultados.append(MultiDayOPFSnapshotResult(
-                    dia=dia,
-                    hora=h,
-                    sucesso=sucesso,
-                    PG=PG,
-                    ANG=ANG,
-                    FLUXO=FLUXO,
-                    DEFICIT=DEFICIT,
-                    CURTAILMENT=CURTAILMENT,
-                    custo_total=custo_total,
-                    deficit_total=deficit_total,
-                    curtailment_total=curtailment_total,
-                    cmo_total=cmo_total,
-                    perdas=perdas,
-                    SOC=SOC,
-                    BATTERY_OPERATION=operacao,
-                    BATTERY_POWER=potencia_bess_mw,
-                    mensagem=mensagem,
-                    timestamp=datetime.now(),
-                    iteracoes=1,
-                    tempo_execucao=0.0,
-                    V=V
-                ))
+                resultados.append(
+                    MultiDayOPFSnapshotResult(
+                        dia=dia,
+                        hora=h,
+                        sucesso=sucesso,
+
+                        PGER=PGER,
+                        PGWIND=PGWIND,
+                        CURTAILMENT=CURTAILMENT,
+                        SOC_init=SOC_init,
+                        BESS_operation=BATTERY_OPERATION,
+                        SOC_atual=SOC_atual,
+                        DEFICIT=DEFICIT,
+                    
+                        V=V,
+                        ANG=ANG,
+                        FLUXO_LIN=FLUXO_LIN,
+
+                        CUSTO=CUSTO,
+                        CMO=CMO,
+                        PERDAS=PERDAS,
+
+                        mensagem=mensagem,
+                        timestamp=datetime.now(),
+                        tempo_execucao=0.0,
+                        )
+                    )
 
         sucesso_global = all(r.sucesso for r in resultados)
         mensagem_global = "OK" if sucesso_global else "Alguns snapshots falharam"

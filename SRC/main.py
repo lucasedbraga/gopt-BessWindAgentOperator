@@ -152,9 +152,7 @@ def main():
         print("\n5. Resumo dos resultados:")
         for snapshot in opf_result.snapshots:
             status = "✓" if snapshot.sucesso else "✗"
-            print(f"   Dia {snapshot.dia+1}, Hora {snapshot.hora:02d}:00 {status}  "
-                  f"Custo: {snapshot.custo_total:8.2f}  "
-                  f"Déficit: {snapshot.deficit_total:6.2f} MW")
+            print(f"   Dia {snapshot.dia+1}, Hora {snapshot.hora:02d}:00 {status}  ")
 
         print("\n" + "=" * 70)
         print("EXECUÇÃO FINALIZADA COM SUCESSO")
