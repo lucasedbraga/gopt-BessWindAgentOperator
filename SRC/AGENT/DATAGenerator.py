@@ -27,7 +27,7 @@ JSON_PATH = "DATA/input/B6L8_BASE.json"          # arquivo do sistema (ajuste se
 WIND_FILE = "/home/lucasedbraga/repositorios/ufjf/mestrado_luedsbr/SRC/SOLVER/DB/getters/intermittent-renewables-production-france.csv"
 DB_PATH = "DATA/output/resultados_PL_RNA.db"
 
-N_ITERACOES = 100         # número total de cenários a gerar
+N_ITERACOES = 1000         # número total de cenários a gerar
 N_DIAS = 7                   # dias por simulação
 N_HORAS = 24                 # horas por dia
 
