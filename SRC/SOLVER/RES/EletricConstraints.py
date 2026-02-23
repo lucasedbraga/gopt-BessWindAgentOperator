@@ -14,9 +14,9 @@ class DCElectricConstraints:
             for g in m.GENERATORS:
                 if sistema.BARPG[g] == i:
                     if g in m.GWD_GENERATORS:
-                        geracao_total += m.PG_WIND_USED[g]
+                        geracao_total += m.PGWIND[g]
                     else:
-                        geracao_total += m.PG[g]
+                        geracao_total += m.PGER[g]
             
             # Déficit na barra
             deficit_barra = m.DEFICIT[i]
@@ -25,15 +25,15 @@ class DCElectricConstraints:
             fluxo_liquido = 0.0
             for e in m.LINES:
                 if sistema.line_fr[e] == i:
-                    fluxo_liquido += m.FLUXO[e]
+                    fluxo_liquido += m.FLUXO_LIN[e]
                 elif sistema.line_to[e] == i:
-                    fluxo_liquido -= m.FLUXO[e]
+                    fluxo_liquido -= m.FLUXO_LIN[e]
             
-            # Perdas (se considerar)
+            # Perdas
             perdas = 0.0
             if considerar_perdas:
-                perdas = m.perdas_barra[i]
-            
+                perdas = m.PERDAS[i]
+
             # Contribuição das baterias (se houver)
             contribuicao_bateria = 0.0
             if hasattr(m, 'BATTERIES') and i in m.BATTERIES:
@@ -52,16 +52,16 @@ class DCElectricConstraints:
         def fluxo_definition_rule(m, e):
             i = sistema.line_fr[e]
             j = sistema.line_to[e]
-            return m.FLUXO[e] == (m.ANG[i] - m.ANG[j]) / sistema.x_line[e]
+            return m.FLUXO_LIN[e] == (m.ANG[i] - m.ANG[j]) / sistema.x_line[e]
         
         model.FluxoDefinition = Constraint(model.LINES, rule=fluxo_definition_rule)
         
         # Limites de fluxo
         def fluxo_max_pos_rule(m, e):
-            return m.FLUXO[e] <= sistema.FLIM[e]
+            return m.FLUXO_LIN[e] <= sistema.FLIM[e]
         
         def fluxo_max_neg_rule(m, e):
-            return m.FLUXO[e] >= -sistema.FLIM[e]
+            return m.FLUXO_LIN[e] >= -sistema.FLIM[e]
         
         model.FluxoMaxPos = Constraint(model.LINES, rule=fluxo_max_pos_rule)
         model.FluxoMaxNeg = Constraint(model.LINES, rule=fluxo_max_neg_rule)
@@ -71,10 +71,19 @@ class DCElectricConstraints:
         """Adiciona limites de geração para geradores convencionais"""
         def generation_limits_rule(m, g):
             if g in m.GWD_GENERATORS:
-                return m.PG[g] == sistema.PGMAX_EFETIVO[g]
+                return m.PGER[g] == sistema.PGMAX_EFETIVO[g]
             else:
                 # Para outros geradores, limites normais
-                return inequality(sistema.PGMIN[g], m.PG[g], sistema.PGMAX[g])
-        
+                return inequality(sistema.PGMIN[g], m.PGER[g], sistema.PGMAX[g])
+
         model.GenerationLimits = Constraint(model.GENERATORS, rule=generation_limits_rule)
     
+    @staticmethod
+    def add_deficit_constraints(model, sistema):
+        """Adiciona restrições para déficit"""
+        def deficit_limits_rule(m, i):
+            # Déficit limitado pela carga da barra
+            carga_barra = sistema.PLOAD[i]
+            return m.DEFICIT[i] <= carga_barra * 2.0
+
+        model.DeficitLimits = Constraint(model.BUSES, rule=deficit_limits_rule)
