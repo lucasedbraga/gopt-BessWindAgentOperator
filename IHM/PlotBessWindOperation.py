@@ -1,54 +1,72 @@
 """
 battery_plots.py
 Classe para carregar dados de operação de baterias do banco SQLite
-e gerar gráficos de barras horários.
-Agora com suporte a data_simulacao como inteiro (dia da simulação).
+a partir das novas tabelas (resultados_opf, DBAR_results) e gerar gráficos de barras horários.
 """
 
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class BatteryPlotter:
     """
-    Lê a tabela bess_wind_operacao do banco resultados_PL.db
+    Lê as tabelas DBAR_results e resultados_opf para extrair informações de bateria
     e produz gráficos de barras para cada bateria.
     """
 
-    def __init__(self, db_path='DATA/output/resultados_PL.db', resultado_id=None, data_base='2026-01-01'):
+    def __init__(self, db_path='DATA/output/resultados_PL.db', cen_id=None):
         """
         Parâmetros:
         -----------
         db_path : str
             Caminho para o arquivo do banco SQLite.
-        resultado_id : int, optional
-            Se informado, filtra apenas os registros com esse resultado_id.
-        data_base : str
-            Data de referência para converter os dias em timestamp.
+        cen_id : str, optional
+            Se informado, filtra apenas os registros com esse cen_id.
         """
         self.db_path = db_path
-        self.resultado_id = resultado_id
-        self.data_base = pd.to_datetime(data_base)
+        self.cen_id = cen_id
         self.df = self._load_data()
         self.baterias = self.df['barra_bess'].unique() if self.df is not None else []
 
     def _load_data(self):
-        """Carrega os dados da tabela bess_wind_operacao e converte para timestamp."""
+        """Carrega os dados de bateria da tabela DBAR_results e adiciona coluna de operação."""
         try:
             conn = sqlite3.connect(self.db_path)
-            query = "SELECT * FROM bess_wind_operacao"
-            if self.resultado_id is not None:
-                query += f" WHERE resultado_id = {self.resultado_id}"
+            # Consulta adaptada para a nova estrutura da tabela DBAR_results
+            query = """
+                SELECT 
+                    cen_id,
+                    data_simulacao,
+                    hora_simulacao,
+                    BAR_id AS barra_bess,
+                    BESS_init_cenario,
+                    BESS_operation_result,
+                    BESS_soc_atual_result
+                FROM DBAR_results
+            """
+            if self.cen_id is not None:
+                query += f" WHERE cen_id = '{self.cen_id}'"
+            query += " ORDER BY cen_id, data_simulacao, hora_simulacao, BAR_id;"
+
             df = pd.read_sql_query(query, conn)
             conn.close()
 
             if df.empty:
-                print("⚠️  Nenhum dado encontrado na tabela bess_wind_operacao.")
+                print("⚠️  Nenhum dado de bateria encontrado nas tabelas.")
                 return None
 
-            df.sort_values(by=['resultado_id','data_simulacao','hora_simulacao'], inplace=True)
+            # Derivar a operação a partir do sinal da potência
+            def classificar_operacao(pot):
+                if pot > 0.01:
+                    return 'charge'
+                elif pot < -0.01:
+                    return 'discharge'
+                else:
+                    return 'idle'
+
+            df['operacao'] = df['BESS_operation_result'].apply(classificar_operacao)
+
             return df
 
         except Exception as e:
@@ -64,18 +82,22 @@ class BatteryPlotter:
             return
 
         df_bat = self.df[self.df['barra_bess'] == barra_bess].copy()
-        if df_bat.empty:
-            print(f"⚠️  Nenhum registro para a bateria na barra {barra_bess}.")
+
+        # Verifica se a bateria teve alguma operação (potência não nula)
+        if (df_bat['BESS_operation_result'].abs() <= 0.001).all():
+            print(f"⚠️  Bateria na barra {barra_bess} não teve operação (todos os valores de potência ≈ 0).")
             return
 
-        df_bat = df_bat.head(24)  # Garantir que só pegue as primeiras 24 horas (ajustável)
-        # Ordenar por timestamp (já deve estar ordenado, mas garantia)
-        df_bat.sort_values(by=['resultado_id','data_simulacao','hora_simulacao'], inplace=True)
+        # Ordenar por hora (dentro de cada dia, se houver múltiplos dias, pode ser necessário concatenar)
+        # Para simplificar, vamos considerar apenas as primeiras 24 horas do primeiro dia,
+        # mas se houver mais dias, podemos criar um eixo temporal contínuo.
+        # O código original limitava a 24 pontos. Vamos manter assim para compatibilidade.
+        df_bat = df_bat.head(24)  # Ajuste conforme necessidade
 
-        # Preparar dados
-        horas = df_bat['hora_simulacao'].values          
-        potencia = df_bat['potencia_bess_mw'].values     
-        soc = df_bat['soc_percent'].values          
+        horas = df_bat['hora_simulacao'].values
+        soc_init = df_bat['BESS_init_cenario'].values
+        BESS_operation = df_bat['BESS_operation_result'].values
+        soc_atual = df_bat['BESS_soc_atual_result'].values
         operacao = df_bat['operacao'].values
 
         # Mapeamento de cores (mantido igual)
@@ -93,19 +115,20 @@ class BatteryPlotter:
         fig, ax1 = plt.subplots(figsize=(14, 6))
 
         # Barras de potência
-        bars = ax1.bar(horas, potencia, color=cores, alpha=0.7, label='Potência (MW)')
+        bars = ax1.bar(horas, BESS_operation, color=cores, alpha=0.7, label='Potência (MW)')
         ax1.axhline(0, color='black', linewidth=0.8, linestyle='--')
         ax1.set_ylabel('Potência (MW)', fontsize=12)
         ax1.set_xlabel('Hora do dia', fontsize=12)
         ax1.set_title(f'Bateria na Barra {barra_bess} - Operação Horária', fontsize=14, fontweight='bold')
-        ax1.set_xticks(range(0, 24, 1))  # ticks de 2 em 2 horas (ajustável)
+        ax1.set_xticks(range(0, 24, 1))
         ax1.grid(True, linestyle=':', alpha=0.6)
 
         # Eixo secundário para SOC (twinx)
         ax2 = ax1.twinx()
-        ax2.plot(horas, soc, color='gray', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC (%)')
+        ax2.plot(horas, soc_init, color='green', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC Inicial (%)')
+        ax2.plot(horas, soc_atual, color='gray', marker='o', linestyle='-', linewidth=2, markersize=4, label='SOC Atual (%)')
         ax2.set_ylabel('SOC (%)', fontsize=12)
-        ax2.set_ylim(0, 105)
+        #ax2.set_ylim(0, 105)
 
         # Legendas combinadas
         lines1, labels1 = ax1.get_legend_handles_labels()
@@ -132,6 +155,6 @@ class BatteryPlotter:
 
 
 if __name__ == '__main__':
-    # Exemplo de teste rápido
-    plotter = BatteryPlotter()
+    # Exemplo de teste rápido (substitua pelo cen_id desejado)
+    plotter = BatteryPlotter(cen_id='20260222181450')  # Exemplo
     plotter.plot_all_batteries()
