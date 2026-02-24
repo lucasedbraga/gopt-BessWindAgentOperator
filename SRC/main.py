@@ -26,8 +26,8 @@ def main():
         # 1. CARREGAR SISTEMA
         # ------------------------------------------------------------------
         print("\n1. Carregando dados do sistema...")
-        #json_path = "DATA/input/3barras_BASE.json"
-        json_path = "DATA/input/B6L8_BASE.json"
+        json_path = "DATA/input/3barras_BASE.json"
+        #json_path = "DATA/input/B6L8_BASE.json"
         #json_path = "DATA/input/ieee14_BASE.json"
         # json_path = "DATA/input/ieee118_BASE.json"
 
@@ -43,8 +43,8 @@ def main():
         print(f"   ✓ Potência base: {sistema.SB:.1f} MVA")
         print(f"   ✓ Barras: {sistema.NBAR}")
         print(f"   ✓ Linhas: {sistema.NLIN}")
-        print(f"   ✓ Geradores: {sistema.NGER_ORIGINAL} originais + {sistema.NGER_CURTAILMENT} curtailment + {sistema.NGER_DEFICIT} déficit")
-        print(f"   ✓ Geradores eólicos (GWD): {len(sistema.BAR_GWD)}")
+        print(f"   ✓ Geradores: {sistema.NGER_CONV} CONVENCIONAIS")
+        print(f"   ✓ Geradores eólicos (GWD): {sistema.NGER_EOL} ")
         print(f"   ✓ Carga total: {np.sum(sistema.PLOAD):.3f} pu ({np.sum(sistema.PLOAD) * sistema.SB:.1f} MW)")
 
         # ------------------------------------------------------------------
@@ -78,7 +78,7 @@ def main():
         # ------------------------------------------------------------------
         # 3. CONFIGURAR SIMULAÇÃO MULTI-DIA
         # ------------------------------------------------------------------
-        n_dias = 2
+        n_dias = 1
         n_horas = 24
         print(f"\n3. Configurando simulação: {n_dias} dias, {n_horas} horas/dia")
 
@@ -89,9 +89,30 @@ def main():
         # Garantindo que seja um array 2D de floats
         amostras_vento = df_wind["wind_factor"].sample(n_dias * n_horas, replace=True).values
         fator_vento = amostras_vento.reshape((n_dias, n_horas))
+        fator_vento = abs(fator_vento)  # garantir não-negatividade
 
-        # Gerar matriz de fatores de carga (distribuição normal em torno de 1)
-        fator_carga = np.random.normal(1, 0.3, size=(n_dias, n_horas))
+        # ------------------------------------------------------------------
+        # Perfil horário típico (fator multiplicativo da carga base)
+        # Leve (0-5h), médio (6-11h), pesado (18-23h) com transições
+        nivel_horario = np.array([
+            0.6, 0.6, 0.6, 0.6, 0.6, 0.6,  # 0h-5h: leve
+            0.7, 0.8, 0.9, 1.0, 1.0, 1.0,  # 6h-11h: médio
+            1.1, 1.0, 1.0, 1.0, 1.0, 1.1,  # 12h-17h: médio com picos
+            1.2, 1.3, 1.2, 1.1, 1.0, 0.8   # 18h-23h: pesado
+        ])
+
+        # Faixa total da incerteza global (ex.: ±10% em torno do nível horário)
+        gu = 0.2   # ajuste conforme necessário
+
+        # Limites inferior e superior para cada hora
+        lim_inf = nivel_horario - gu/2
+        lim_sup = nivel_horario + gu/2
+
+        # Gerar matriz de fatores de carga (dias x horas) usando distribuição uniforme
+        fator_carga = np.random.uniform(low=lim_inf, high=lim_sup, size=(n_dias, n_horas))
+
+        # (Opcional: usar distribuição normal com 3σ = gu/2, ou seja, σ = gu/6)
+        # fator_carga = np.random.normal(loc=nivel_horario, scale=gu/6, size=(n_dias, n_horas))
 
         print(f"   ✓ Fatores de vento (exemplo primeiro dia): {fator_vento[0, :5]} ...")
         print(f"   ✓ Fatores de carga (exemplo primeiro dia): {fator_carga[0, :5]} ...")
@@ -118,10 +139,9 @@ def main():
                 fator_carga=fator_carga,
                 fator_vento=fator_vento,
                 soc_inicial=SOC_inicial_bateria,
-                cen_id=cen_id          # necessário para o salvamento automático
+                cen_id=cen_id
             )
         else:
-            # Opção B: Salvamento manual (como no script original)
             multi_model = MultiDayOPFModel(sistema, n_horas=n_horas, n_dias=n_dias, db_handler=None)
             opf_result = multi_model.solve_multiday_sequencial(
                 solver_name='glpk',

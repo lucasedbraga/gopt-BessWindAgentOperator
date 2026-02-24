@@ -14,6 +14,7 @@ class MultiDayOPFSnapshotResult:
     sucesso: bool
 
     PGER: List[float] = field(default_factory=list)
+    PGWIND_disponivel: List[float] = field(default_factory=list)
     PGWIND: List[float] = field(default_factory=list)
     CURTAILMENT: List[float] = field(default_factory=list)
     SOC_init: List[float] = field(default_factory=list)
@@ -27,7 +28,7 @@ class MultiDayOPFSnapshotResult:
 
     CUSTO: List[float] = field(default_factory=list)
     CMO: List[float] = field(default_factory=list)
-    PERDAS: List[float] = field(default_factory=list)
+    PERDAS_BARRA: List[float] = field(default_factory=list)
 
     mensagem: str = ""
     timestamp: Optional[datetime] = None
@@ -147,7 +148,7 @@ class MultiDayOPFModel:
         return novo_soc
 
     def solve_multiday_sequencial(self, solver_name='glpk', fator_carga=None, fator_vento=None,
-                                  soc_inicial=None, cen_id=None):
+                                soc_inicial=None, cen_id=None):
         """
         Resolve cada hora/dia separadamente, conectando via SOC da bateria.
         Para cada simulação, aplica os fatores de carga e vento fornecidos.
@@ -155,60 +156,63 @@ class MultiDayOPFModel:
         """
         resultados = []
         n_bat = len(self.sistema.BARRAS_COM_BATERIA)
-        self.sistema.SOC_init = soc_inicial if soc_inicial is not None else [0.0]*n_bat
+        
+        # Define o SOC inicial (usado na primeira iteração)
+        soc_atual = soc_inicial if soc_inicial is not None else [0.0] * n_bat
+
         # Salva os valores originais para restaurar depois
         PLOAD_original = self.sistema.PLOAD.copy()
         PGMAX_EFETIVO_original = self.sistema.PGMAX_EFETIVO.copy() if hasattr(self.sistema, 'PGMAX_EFETIVO') else None
 
         for dia in range(self.n_dias):
             for h in range(self.n_horas):
+                # Atualiza SOC inicial do sistema com o valor atual
+                self.sistema.SOC_init = soc_atual
+
                 # Atualiza carga para o valor dessa hora/dia
                 if fator_carga is not None:
                     self.sistema.PLOAD = PLOAD_original * fator_carga[dia, h]
-                # Atualiza vento para o valor dessa hora/dia
+
+                # Atualiza perfil eólico para o valor dessa hora/dia
                 if fator_vento is not None:
-                    for g_idx in self.sistema.BAR_GWD:
-                        self.sistema.PGMAX_EFETIVO[g_idx] = self.sistema.PGMAX[g_idx] * fator_vento[dia, h]
-                        
+                    self.sistema.atualizar_perfil_eolico(fator_vento[dia, h])
+
+                # Dentro do loop de dia/hora:
                 opf = DC_OPF_Model()
                 opf.build(self.sistema, considerar_perdas=True)
-                solver = DC_OPF_EconomicDispatch_Solver(self.sistema)
-                solver.add_objective(opf)
 
-                solver_pyomo = SolverFactory(solver_name)
-                results_pyomo = solver_pyomo.solve(opf.model, tee=False)
+                # Adiciona a função objetivo (custo de geração, penalidades etc.)
+                solver_obj = DC_OPF_EconomicDispatch_Solver(self.sistema)
+                solver_obj.add_objective(opf)
 
-                res = opf.extract_results(results_pyomo)
-                soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0]*n_bat
-                # Atualiza SOC inicial
-                self.sistema.SOC_init = soc_atual
+                # Resolve iterativamente considerando perdas
+                res = opf.solve_iterative(solver=solver_name, tol=1e-4, max_iter=20)
 
-                # Cria o snapshot de resultado
+                # Agora 'res' já é um OPFResult, use diretamente
+                soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0] * n_bat
+
+                # Cria o snapshot
                 snapshot = MultiDayOPFSnapshotResult(
                     dia=dia,
                     hora=h,
                     sucesso=res.sucesso,
-
                     PGER=res.PGER,
+                    PGWIND_disponivel=res.PGWIND_disponivel,
                     PGWIND=res.PGWIND,
                     CURTAILMENT=res.CURTAILMENT,
                     SOC_init=res.SOC_init,
                     BESS_operation=res.BESS_operation,
                     SOC_atual=res.SOC_atual,
                     DEFICIT=res.DEFICIT,
-
                     V=res.V,
                     ANG=res.ANG,
-                    FLUXO_LIN= res.FLUXO_LIN,
-                   
+                    FLUXO_LIN=res.FLUXO_LIN,
                     CUSTO=res.CUSTO,
                     CMO=res.CMO,
-                    PERDAS=res.PERDAS,
-
+                    PERDAS_BARRA=res.PERDAS_BARRA,
                     mensagem=res.mensagem,
                     timestamp=res.timestamp,
                     tempo_execucao=getattr(res, 'tempo_execucao', 0.0),
-
                 )
                 resultados.append(snapshot)
 
@@ -248,6 +252,7 @@ class MultiDayOPFModel:
                 opf_model = block.opf
                 try:
                     PGER = [float(opf_model.PG[g].value) for g in opf_model.GENERATORS] if hasattr(opf_model, 'PG') else []
+                    PGWIND_disponivel = [float(opf_model.PGWIND_disponivel[g].value) for g in opf_model.GWD_GENERATORS] if hasattr(opf_model, 'PGWIND_disponivel') else []
                     PGWIND = [float(opf_model.PG[g].value) for g in opf_model.BAR_GWD] if hasattr(opf_model, 'PG') else []
                     CURTAILMENT = [float(opf_model.CURTAILMENT[g].value) for g in opf_model.GWD_GENERATORS] if hasattr(opf_model, 'CURTAILMENT') else []
                     SOC_init = [self.sistema.BATTERY_INITIAL_SOC[idx] if idx < len(self.sistema.BATTERY_INITIAL_SOC) else 0.0 for idx in range(len(self.sistema.BARRAS_COM_BATERIA))]
@@ -261,7 +266,7 @@ class MultiDayOPFModel:
                    
                     CUSTO = []
                     CMO = []
-                    PERDAS = []
+                    PERDAS_BARRA = []
 
                     for idx in range(len(self.sistema.BARRAS_COM_BATERIA)):
                         charge = opf_model.CHARGE[idx].value if hasattr(opf_model, 'CHARGE') else 0.0
@@ -275,7 +280,7 @@ class MultiDayOPFModel:
                 except Exception as e:
                     PGER = PGWIND = DEFICIT = CURTAILMENT = SOC_init = SOC_atual = BATTERY_OPERATION = []
                     V = ANG = FLUXO_LIN = []
-                    CUSTO = CMO = PERDAS = []
+                    CUSTO = CMO = PERDAS_BARRA = []
                     sucesso = False
                     mensagem = str(e)
 
@@ -286,6 +291,7 @@ class MultiDayOPFModel:
                         sucesso=sucesso,
 
                         PGER=PGER,
+                        PGWIND_disponivel=PGWIND_disponivel,
                         PGWIND=PGWIND,
                         CURTAILMENT=CURTAILMENT,
                         SOC_init=SOC_init,
@@ -299,7 +305,7 @@ class MultiDayOPFModel:
 
                         CUSTO=CUSTO,
                         CMO=CMO,
-                        PERDAS=PERDAS,
+                        PERDAS_BARRA=PERDAS_BARRA,
 
                         mensagem=mensagem,
                         timestamp=datetime.now(),
