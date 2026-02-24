@@ -126,6 +126,7 @@ class DC_OPF_Model:
     def add_constraints(self):
         """Adiciona todas as restrições ao modelo."""
         from SOLVER.RES.EletricConstraints import DCElectricConstraints
+        from SOLVER.RES.TermicGeneratorConstraint import TermicGeneratorConstraints
         from SOLVER.RES.WindGeneratorConstraints import WindGeneratorConstraints
         from SOLVER.RES.BatteryConstraints import BatteryConstraints
 
@@ -141,7 +142,10 @@ class DC_OPF_Model:
             BatteryConstraints.add_battery_constraints(m, s)
 
         # Limites dos geradores convencionais
-        DCElectricConstraints.add_generator_limits_constraints(m, s)
+        TermicGeneratorConstraints.add_generator_limits_constraints(m, s)
+
+        # Restrição de Rampa
+        TermicGeneratorConstraints.add_ramp_constraints(m,s)
 
         # Déficit
         DCElectricConstraints.add_deficit_constraints(m, s)

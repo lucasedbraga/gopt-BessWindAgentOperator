@@ -156,10 +156,10 @@ class MultiDayOPFModel:
         """
         resultados = []
         n_bat = len(self.sistema.BARRAS_COM_BATERIA)
-        
+                
         # Define o SOC inicial (usado na primeira iteração)
         soc_atual = soc_inicial if soc_inicial is not None else [0.0] * n_bat
-
+        self.sistema.last_generation = [0.0] * self.sistema.NGER_CONV
         # Salva os valores originais para restaurar depois
         PLOAD_original = self.sistema.PLOAD.copy()
         PGMAX_EFETIVO_original = self.sistema.PGMAX_EFETIVO.copy() if hasattr(self.sistema, 'PGMAX_EFETIVO') else None
@@ -168,7 +168,6 @@ class MultiDayOPFModel:
             for h in range(self.n_horas):
                 # Atualiza SOC inicial do sistema com o valor atual
                 self.sistema.SOC_init = soc_atual
-
                 # Atualiza carga para o valor dessa hora/dia
                 if fator_carga is not None:
                     self.sistema.PLOAD = PLOAD_original * fator_carga[dia, h]
@@ -190,7 +189,7 @@ class MultiDayOPFModel:
 
                 # Agora 'res' já é um OPFResult, use diretamente
                 soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0] * n_bat
-
+                self.sistema.last_generation = res.PGER.copy()
                 # Cria o snapshot
                 snapshot = MultiDayOPFSnapshotResult(
                     dia=dia,
