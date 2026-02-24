@@ -6,18 +6,18 @@
   "Q_base": 1.0,
 
   "BARRAS": [
-    {"ID_Barra": "1", "tipo": "Slack", "P_carga_MW": 0.0, "Q_carga_MW": 0.0},
-    {"ID_Barra": "2", "tipo": "PV", "P_carga_MW": 0.0, "Q_carga_MW": 0.0},
-    {"ID_Barra": "3", "tipo": "PQ", "P_carga_MW": 1.0, "Q_carga_MW": 0.0}
+    {"ID_Barra": "1", "tipo": "Slack"},
+    {"ID_Barra": "2", "tipo": "PV"},
+    {"ID_Barra": "3", "tipo": "PQ"}
   ],
 
   "GERADORES": [
     {
       "ID_Gerador": "G1",
       "ID_Barra": "1",
-      "Tipo": "UTH",
+      "Tipo": "UTE",
       "PGERmin_MW": 0.0,
-      "PGERmax_MW": 1.5,
+      "PGERmax_MW": 2.0,
       "Qmin_MW": -0.5,
       "Qmax_MW": 1.5,
       "ramp_up_MW_h": 0.4,
@@ -28,23 +28,8 @@
       "Unidade": "pu"
     },
     {
-      "ID_Gerador": "G2",
+      "ID_Gerador": "GWD 1",
       "ID_Barra": "2",
-      "Tipo": "UTE",
-      "PGERmin_MW": 0.0,
-      "PGERmax_MW": 1.5,
-      "Qmin_MW": -0.5,
-      "Qmax_MW": 1.5,
-      "ramp_up_MW_h": 0.4,
-      "ramp_down_MW_h": 0.4,
-      "startup_USD": 1.0,
-      "custo_var_USD_MW": 20.0,
-      "emissao_tCO2_MW": 1.0,
-      "Unidade": "pu"
-    },
-    {
-      "ID_Gerador": "G3",
-      "ID_Barra": "3",
       "Tipo": "GWD",
       "PGERmin_MW": 0.0,
       "PGERmax_MW": 0.5,
@@ -80,7 +65,7 @@
       "X_Unidade": "pu",
       "Bsh": 0.0,
       "Bsh_Unidade": "pu",
-      "LIM_Fluxo": 0.2,
+      "LIM_Fluxo": 1.0,
       "LIM_Fluxo_Unidade": "pu"
     },
     {
@@ -106,16 +91,16 @@
       "X_Unidade": "pu",
       "Bsh": 0.0,
       "Bsh_Unidade": "pu",
-      "LIM_Fluxo": 0.6,
+      "LIM_Fluxo": 0.5,
       "LIM_Fluxo_Unidade": "pu"
     }
   ],
   "BATERIAS": [
     {
       "ID_Bateria": "BAT1",
-      "ID_Barra": "3",
-      "Pmax_carga_MW": 10.0,
-      "Pmax_descarga_MW": 10.0,
+      "ID_Barra": "2",
+      "Pmax_carga_MW": 0.1,
+      "Pmax_descarga_MW": 0.1,
       "capacidade_armazenamento_MWh": 1.0,
       "min_soc": 0.1,
       "custo_carga_USD_MWh": 1,
