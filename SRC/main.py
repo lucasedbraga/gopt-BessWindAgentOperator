@@ -29,7 +29,7 @@ def main():
         json_path = "DATA/input/3barras_BASE.json"
         #json_path = "DATA/input/B6L8_BASE.json"
         #json_path = "DATA/input/ieee14_BASE.json"
-        # json_path = "DATA/input/ieee118_BASE.json"
+        #json_path = "DATA/input/ieee118_BASE.json"
 
         if not os.path.exists(json_path):
             print(f"ERRO: Arquivo não encontrado: {json_path}")
