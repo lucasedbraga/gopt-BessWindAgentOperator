@@ -3,44 +3,8 @@ from pyomo.opt import SolverFactory
 from OPT.DC_OPF_Model import DC_OPF_Model
 import numpy as np
 from SOLVER.FOB.economic_dispatch import DC_OPF_EconomicDispatch_Solver
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from DB.OPF_Snapshot_DBmodel import *
 
-@dataclass
-class MultiDayOPFSnapshotResult:
-    dia: int
-    hora: int
-    sucesso: bool
-
-    PGER: List[float] = field(default_factory=list)
-    PGWIND_disponivel: List[float] = field(default_factory=list)
-    PGWIND: List[float] = field(default_factory=list)
-    CURTAILMENT: List[float] = field(default_factory=list)
-    SOC_init: List[float] = field(default_factory=list)
-    BESS_operation: List[float] = field(default_factory=list)
-    SOC_atual: List[float] = field(default_factory=list)
-    DEFICIT: List[float] = field(default_factory=list)
-
-    V: List[float] = field(default_factory=list)
-    ANG: List[float] = field(default_factory=list)
-    FLUXO_LIN: List[float] = field(default_factory=list)
-
-    CUSTO: List[float] = field(default_factory=list)
-    CMO: List[float] = field(default_factory=list)
-    PERDAS_BARRA: List[float] = field(default_factory=list)
-
-    mensagem: str = ""
-    timestamp: Optional[datetime] = None
-    tempo_execucao: float = 0.0
-
-
-
-@dataclass
-class MultiDayOPFResult:
-    snapshots: List[MultiDayOPFSnapshotResult] = field(default_factory=list)
-    sucesso_global: bool = True
-    mensagem_global: str = ""
 
 class MultiDayOPFModel:
     def __init__(self, sistema, n_horas=24, n_dias=1, db_handler=None):
