@@ -72,3 +72,10 @@ class BatteryConstraints:
         def discharge_limit_rule(m, b):
             return m.DISCHARGE[b] <= sistema.BATTERY_POWER_OUT[b]
         model.BatteryDischargeLimit = Constraint(model.BATTERIES, rule=discharge_limit_rule)
+
+        def battery_operation(m,b):
+            return m.BatteryOperation[b] == m.DISCHARGE[b] - m.CHARGE[b]
+
+        model.BatteryOperationDefinition = Constraint(model.BATTERIES, rule=battery_operation)
+
+        

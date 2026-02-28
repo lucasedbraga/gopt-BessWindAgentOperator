@@ -207,9 +207,6 @@ def main():
     joblib.dump(pipeline, model_path)
     print(f"\nPipeline completo (pré-processador + MLP) salvo em: {model_path}")
 
-    # Exemplo de como carregar e usar depois:
-    # pipeline_carregado = joblib.load('pipeline_modelo_unico.joblib')
-    # previsoes = pipeline_carregado.predict(X_novo)
 
 if __name__ == '__main__':
     main()

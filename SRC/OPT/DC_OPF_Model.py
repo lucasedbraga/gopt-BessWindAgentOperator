@@ -84,9 +84,9 @@ class DC_OPF_Model:
         # Baterias (se houver)
         if hasattr(s, 'BATTERIES') and len(s.BATTERIES) > 0:
             m.BATTERIES = Set(initialize=s.BATTERIES)   # índices das barras com bateria
+            m.BatteryOperation = Var(m.BATTERIES, within=Reals)  
         else:
             m.BATTERIES = Set(initialize=[])
-
         # === VARIÁVEIS ===
         # Geração convencional
         m.PGER = Var(m.CONV_GENERATORS, within=NonNegativeReals)
