@@ -156,7 +156,8 @@ def train_and_evaluate_for_group(X, y, group_name, models_dir):
     df_out.to_csv(os.path.join(group_dir, 'previsoes_teste.csv'), index=False)
 
     return {
-        'grupo': group_name,
+        'dia': group_name[0],
+        'hora': group_name[1],
         'n_amostras': len(X),
         'n_treino': len(X_train),
         'n_teste': len(X_test),
