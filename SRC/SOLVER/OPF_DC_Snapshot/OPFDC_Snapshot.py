@@ -125,10 +125,10 @@ class DC_OPF_Model:
 
     def add_constraints(self):
         """Adiciona todas as restrições ao modelo."""
-        from SOLVER.RES.EletricConstraints import DCElectricConstraints
-        from SOLVER.RES.TermicGeneratorConstraint import TermicGeneratorConstraints
-        from SOLVER.RES.WindGeneratorConstraints import WindGeneratorConstraints
-        from SOLVER.RES.BatteryConstraints import BatteryConstraints
+        from RES.EletricConstraints import DCElectricConstraints
+        from RES.TermicGeneratorConstraint import TermicGeneratorConstraints
+        from RES.WindGeneratorConstraints import WindGeneratorConstraints
+        from RES.BatteryConstraints import BatteryConstraints
 
         m = self.model
         s = self.sistema

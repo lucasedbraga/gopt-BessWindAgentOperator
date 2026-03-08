@@ -4,7 +4,7 @@ import time
 from typing import Dict, Optional
 from datetime import datetime
 
-from OPT.DC_OPF_Model import DC_OPF_Model, OPFResult
+from SRC.SOLVER.OPF_DC_Snapshot.OPFDC_Snapshot import DC_OPF_Model, OPFResult
 
 class DC_OPF_EconomicDispatch_Solver:
     """Solver genérico para OPF com nova estrutura de dados (convencionais e eólicos separados)"""
