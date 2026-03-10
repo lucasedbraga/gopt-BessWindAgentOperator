@@ -1,46 +1,10 @@
 from pyomo.environ import ConcreteModel, Block, Var, Constraint, NonNegativeReals, Objective, minimize, ConstraintList
 from pyomo.opt import SolverFactory
-from OPT.DC_OPF_Model import DC_OPF_Model
+from SRC.SOLVER.OPF_DC_Snapshot.OPFDC_Snapshot import DC_OPF_Model
 import numpy as np
 from SOLVER.FOB.economic_dispatch import DC_OPF_EconomicDispatch_Solver
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from SRC.DB.DBmodel_OPF import *
 
-@dataclass
-class MultiDayOPFSnapshotResult:
-    dia: int
-    hora: int
-    sucesso: bool
-
-    PGER: List[float] = field(default_factory=list)
-    PGWIND_disponivel: List[float] = field(default_factory=list)
-    PGWIND: List[float] = field(default_factory=list)
-    CURTAILMENT: List[float] = field(default_factory=list)
-    SOC_init: List[float] = field(default_factory=list)
-    BESS_operation: List[float] = field(default_factory=list)
-    SOC_atual: List[float] = field(default_factory=list)
-    DEFICIT: List[float] = field(default_factory=list)
-
-    V: List[float] = field(default_factory=list)
-    ANG: List[float] = field(default_factory=list)
-    FLUXO_LIN: List[float] = field(default_factory=list)
-
-    CUSTO: List[float] = field(default_factory=list)
-    CMO: List[float] = field(default_factory=list)
-    PERDAS_BARRA: List[float] = field(default_factory=list)
-
-    mensagem: str = ""
-    timestamp: Optional[datetime] = None
-    tempo_execucao: float = 0.0
-
-
-
-@dataclass
-class MultiDayOPFResult:
-    snapshots: List[MultiDayOPFSnapshotResult] = field(default_factory=list)
-    sucesso_global: bool = True
-    mensagem_global: str = ""
 
 class MultiDayOPFModel:
     def __init__(self, sistema, n_horas=24, n_dias=1, db_handler=None):
@@ -156,10 +120,10 @@ class MultiDayOPFModel:
         """
         resultados = []
         n_bat = len(self.sistema.BARRAS_COM_BATERIA)
-        
+                
         # Define o SOC inicial (usado na primeira iteração)
         soc_atual = soc_inicial if soc_inicial is not None else [0.0] * n_bat
-
+        self.sistema.last_generation = [0.0] * self.sistema.NGER_CONV
         # Salva os valores originais para restaurar depois
         PLOAD_original = self.sistema.PLOAD.copy()
         PGMAX_EFETIVO_original = self.sistema.PGMAX_EFETIVO.copy() if hasattr(self.sistema, 'PGMAX_EFETIVO') else None
@@ -168,7 +132,6 @@ class MultiDayOPFModel:
             for h in range(self.n_horas):
                 # Atualiza SOC inicial do sistema com o valor atual
                 self.sistema.SOC_init = soc_atual
-
                 # Atualiza carga para o valor dessa hora/dia
                 if fator_carga is not None:
                     self.sistema.PLOAD = PLOAD_original * fator_carga[dia, h]
@@ -190,7 +153,7 @@ class MultiDayOPFModel:
 
                 # Agora 'res' já é um OPFResult, use diretamente
                 soc_atual = res.SOC_atual.copy() if res.SOC_atual else [0.0] * n_bat
-
+                self.sistema.last_generation = res.PGER.copy()
                 # Cria o snapshot
                 snapshot = MultiDayOPFSnapshotResult(
                     dia=dia,

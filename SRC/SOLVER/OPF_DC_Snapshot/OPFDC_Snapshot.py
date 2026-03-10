@@ -84,9 +84,9 @@ class DC_OPF_Model:
         # Baterias (se houver)
         if hasattr(s, 'BATTERIES') and len(s.BATTERIES) > 0:
             m.BATTERIES = Set(initialize=s.BATTERIES)   # índices das barras com bateria
+            m.BatteryOperation = Var(m.BATTERIES, within=Reals)  
         else:
             m.BATTERIES = Set(initialize=[])
-
         # === VARIÁVEIS ===
         # Geração convencional
         m.PGER = Var(m.CONV_GENERATORS, within=NonNegativeReals)
@@ -125,9 +125,10 @@ class DC_OPF_Model:
 
     def add_constraints(self):
         """Adiciona todas as restrições ao modelo."""
-        from SOLVER.RES.EletricConstraints import DCElectricConstraints
-        from SOLVER.RES.WindGeneratorConstraints import WindGeneratorConstraints
-        from SOLVER.RES.BatteryConstraints import BatteryConstraints
+        from RES.EletricConstraints import DCElectricConstraints
+        from RES.TermicGeneratorConstraint import TermicGeneratorConstraints
+        from RES.WindGeneratorConstraints import WindGeneratorConstraints
+        from RES.BatteryConstraints import BatteryConstraints
 
         m = self.model
         s = self.sistema
@@ -141,7 +142,10 @@ class DC_OPF_Model:
             BatteryConstraints.add_battery_constraints(m, s)
 
         # Limites dos geradores convencionais
-        DCElectricConstraints.add_generator_limits_constraints(m, s)
+        TermicGeneratorConstraints.add_generator_limits_constraints(m, s)
+
+        # Restrição de Rampa
+        TermicGeneratorConstraints.add_ramp_constraints(m,s)
 
         # Déficit
         DCElectricConstraints.add_deficit_constraints(m, s)

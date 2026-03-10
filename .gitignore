@@ -207,8 +207,7 @@ marimo/_lsp/
 __marimo__/
 
 # Output data and results
-DATA/output/resultados_PL.db
-DATA/output/modelos_por_barra/*
-DATA/output/resultados_PL_RNA.db
-
-IHM/BessWindOperation.ipynb
+DATA/output/*
+IHM/PowerBalance.ipynb
+IHM/LinesOperation.ipynb
+IHM/PowerBalance.ipynb

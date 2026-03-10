@@ -41,7 +41,7 @@ class DCElectricConstraints:
             # Contribuição das baterias (se houver)
             contribuicao_bateria = 0.0
             if hasattr(m, 'BATTERIES') and i in m.BATTERIES:
-                contribuicao_bateria = m.DISCHARGE[i] - m.CHARGE[i]
+                contribuicao_bateria = m.BatteryOperation[i]
 
             # Balanço: geração total + déficit + bateria - fluxo líquido - perdas = carga
             return (geracao_conv + geracao_eol + deficit_barra + contribuicao_bateria 

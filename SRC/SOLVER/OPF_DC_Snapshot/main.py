@@ -14,8 +14,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from UTILS.systemLoader import SistemaLoader
-from DB.OPF_DBhandler import OPF_DBHandler
-from SRC.OPT.DC_OPF_BESS_Desacoplado import MultiDayOPFModel
+from SRC.DB.DBhandler_OPF import OPF_DBHandler
+from SRC.SOLVER.OPF_DC_Snapshot.OPFDC_Sequential import MultiDayOPFModel
 
 def main():
     print("=" * 70)
@@ -29,7 +29,7 @@ def main():
         json_path = "DATA/input/3barras_BASE.json"
         #json_path = "DATA/input/B6L8_BASE.json"
         #json_path = "DATA/input/ieee14_BASE.json"
-        # json_path = "DATA/input/ieee118_BASE.json"
+        #json_path = "DATA/input/ieee118_BASE.json"
 
         if not os.path.exists(json_path):
             print(f"ERRO: Arquivo não encontrado: {json_path}")
