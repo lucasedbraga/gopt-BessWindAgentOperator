@@ -34,9 +34,9 @@ from UTILS.EvaluateFactors import EvaluateFactors
 JSON_PATH = "DATA/input/3barras_BASE.json"        # arquivo do sistema
 DB_PATH = "DATA/output/resultados_PL_acoplado_RNA.db"
 
-N_ITERACOES = 1000         # número total de cenários
-N_DIAS = 30                 # dias por simulação
-N_HORAS = 24               # horas por dia
+N_ITERACOES = 5         # número total de cenários
+N_DIAS = 30             # dias por simulação
+N_HORAS = 24            # horas por dia
 
 # Parâmetros da bateria (frações da capacidade total)
 SOC_INICIAL_FRACAO = 0.5   # 50% da capacidade
@@ -46,7 +46,7 @@ SOC_FINAL_FRACAO = 0.5     # 50% da capacidade (pode ser alterado no loop)
 CONSIDERAR_PERDAS = True
 SOLVER_NAME = 'glpk'
 TOL = 1e-4
-MAX_ITER = 20
+MAX_ITER = 10
 
 # Para reprodutibilidade, comente a linha abaixo se quiser total aleatoriedade
 # np.random.seed(42)
@@ -138,29 +138,26 @@ def main():
                 max_iter=MAX_ITER
             )
 
-            # -----------------------------------------------------------------
-            # Extrair resultados e salvar manualmente (caso o modelo não salve)
-            # -----------------------------------------------------------------
-            resultados = modelo.extract_results()
+            # # -----------------------------------------------------------------
+            # # Extrair resultados e salvar manualmente (caso o modelo não salve)
+            # # -----------------------------------------------------------------
+            # resultados = modelo.extract_results()
 
-            # Contar snapshots com sucesso
-            snaps_ok = 0
-            for snapshot in resultados.snapshots:
-                # O método save_hourly_result espera um objeto com atributos como:
-                # snapshot.hora, snapshot.dia, snapshot.sucesso, snapshot.Pg, etc.
-                # Certifique-se de que o snapshot possui os campos necessários.
-                db_handler.save_hourly_result(
-                    resultado=snapshot,
-                    sistema=sistema,
-                    hora=snapshot.hora,
-                    solver_name=SOLVER_NAME,
-                    dia=f"{snapshot.dia+1}",
-                    cen_id=cen_id
-                )
-                if snapshot.sucesso:
-                    snaps_ok += 1
+            # # Contar snapshots com sucesso
+            # snaps_ok = 0
+            # for snapshot in resultados.snapshots:
+            #     db_handler.save_hourly_result(
+            #         resultado=snapshot,
+            #         sistema=sistema,
+            #         hora=snapshot.hora,
+            #         solver_name=SOLVER_NAME,
+            #         dia=f"{snapshot.dia+1}",
+            #         cen_id=cen_id
+            #     )
+            #     if snapshot.sucesso:
+            #         snaps_ok += 1
 
-            print(f"   [{i+1:5d}/{N_ITERACOES}] Cenário {cen_id} concluído - {snaps_ok}/{N_DIAS*N_HORAS} snaps OK")
+            print(f"   [{i+1:5d}/{N_ITERACOES}] Cenário {cen_id} concluído")
 
         except Exception as e:
             print(f"   [!] Erro na iteração {i}: {e}")

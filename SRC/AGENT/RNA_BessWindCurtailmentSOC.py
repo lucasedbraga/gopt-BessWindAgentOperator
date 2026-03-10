@@ -113,8 +113,8 @@ def train_and_evaluate_for_group(X, y, group_name, models_dir):
         max_iter=MAX_ITER,
         random_state=RANDOM_STATE,
         early_stopping=True,
-        validation_fraction=0.1,
-        n_iter_no_change=10,
+        validation_fraction=0.2,
+        n_iter_no_change=100,
         verbose=False
     )
 
@@ -131,7 +131,10 @@ def train_and_evaluate_for_group(X, y, group_name, models_dir):
 
     # Previsões
     y_pred = pipeline.predict(X_test)
-
+    df_output = pd.DataFrame(y_pred) 
+    df_output.columns = y_test.columns
+    df_input = y_test.reset_index()
+    df_edimar = df_input - df_output
     # Métricas
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred, multioutput='uniform_average')
@@ -153,7 +156,7 @@ def train_and_evaluate_for_group(X, y, group_name, models_dir):
     df_out['CURTAILMENT_previsto'] = y_pred[:, 0]
     df_out['BESS_operation_previsto'] = y_pred[:, 1]
     df_out['correto'] = correctness
-    df_out.to_csv(os.path.join(group_dir, 'previsoes_teste.csv'), index=False)
+    #df_out.to_csv(os.path.join(group_dir, 'previsoes_teste.csv'), index=False)
 
     return {
         'dia': group_name[0],
@@ -266,9 +269,9 @@ def main():
         print("Nenhum modelo foi treinado (verifique os dados e o limite mínimo de amostras).")
         return
 
-    summary_csv = os.path.join(MODELS_DIR, 'resumo_modelos.csv')
-    summary_df.to_csv(summary_csv, index=False)
-    print(f"Resumo salvo em: {summary_csv}")
+    # summary_csv = os.path.join(MODELS_DIR, 'resumo_modelos.csv')
+    # summary_df.to_csv(summary_csv, index=False)
+    # print(f"Resumo salvo em: {summary_csv}")
 
     # 6. Estatísticas globais
     print("\n--- Estatísticas Globais ---")
