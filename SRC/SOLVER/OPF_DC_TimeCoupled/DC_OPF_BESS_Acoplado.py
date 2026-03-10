@@ -492,7 +492,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 2. Parâmetros da simulação
     # -------------------------------------------------------------------------
-    n_dias = 30
+    n_dias = 1
     n_horas = 24
     T = n_dias * n_horas
     print(f"\n2. Simulando {n_dias} dias x {n_horas} horas = {T} períodos.")
@@ -528,6 +528,9 @@ if __name__ == "__main__":
     # 6. Obter fatores de carga
     # -------------------------------------------------------------------------
     from UTILS.EvaluateFactors import EvaluateFactors
+    import secrets
+    seed = secrets.randbits(32)
+
 
     avaliador = EvaluateFactors(
         sistema=sistema,
@@ -535,7 +538,7 @@ if __name__ == "__main__":
         n_horas=n_horas,
         carga_incerteza=0.2,
         vento_variacao=0.1,
-        seed=42
+        seed=seed
     )
 
     fatores_carga, fatores_vento = avaliador.gerar_tudo()
@@ -549,7 +552,7 @@ if __name__ == "__main__":
         soc_final=SOC_final,
         cen_id=cen_id,
         tol=1e-4,
-        max_iter=20
+        max_iter=10
     )
 
     status = raw.solver.termination_condition
