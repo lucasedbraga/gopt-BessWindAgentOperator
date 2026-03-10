@@ -41,6 +41,9 @@ class SistemaLoader:
         self.PGMIN_CONV = np.array([])
         self.PGMAX_CONV = np.array([])
         self.CPG_CONV = np.array([])
+        self.RAMP_UP = np.array([])
+        self.RAMP_DOWN = np.array([])
+        self.PGER_INICIAL_CONV = np.array([])   # geração inicial (pu)
 
         # --- Geradores eólicos (GWD) ---
         self.NGER_EOL = 0
@@ -198,6 +201,7 @@ class SistemaLoader:
         cpg_conv = []
         ramp_up_MW_h = []
         ramp_down_MW_h = []
+        pg_inicial_conv = []  # geração inicial (pu)
 
         # Listas temporárias para eólicos
         barpg_eol = []
@@ -225,10 +229,11 @@ class SistemaLoader:
                 pgmin_conv.append(g.get("PGERmin_pu", 0.0))
                 pgmax_conv.append(g.get("PGERmax_pu", 1.0))
                 cpg_conv.append(g.get("custo_var_pu", 50.0))
-                ramp_up_MW_h.append(g.get("ramp_up_MW_h",100))
-                ramp_down_MW_h.append(g.get("ramp_down_MW_h",100))
-
-
+                ramp_up_MW_h.append(g.get("ramp_up_MW_h", 100))
+                ramp_down_MW_h.append(g.get("ramp_down_MW_h", 100))
+                # Geração inicial: campo opcional, se não existir, assume 0.0
+                pg_ini_mw = g.get("PGER_inicial_MW", 0.0)
+                pg_inicial_conv.append(pg_ini_mw / self.SB)
 
         # Converte para arrays numpy
         self.NGER_CONV = len(barpg_conv)
@@ -239,6 +244,7 @@ class SistemaLoader:
         self.CPG_CONV = np.array(cpg_conv)
         self.RAMP_UP = np.array(ramp_up_MW_h)
         self.RAMP_DOWN = np.array(ramp_down_MW_h)
+        self.PGER_INICIAL_CONV = np.array(pg_inicial_conv)
 
         self.NGER_EOL = len(barpg_eol)
         self.BARPG_EOL = barpg_eol
@@ -376,6 +382,9 @@ class SistemaLoader:
             'PGMIN_CONV': self.PGMIN_CONV,
             'PGMAX_CONV': self.PGMAX_CONV,
             'CPG_CONV': self.CPG_CONV,
+            'RAMP_UP': self.RAMP_UP,
+            'RAMP_DOWN': self.RAMP_DOWN,
+            'PGER_INICIAL_CONV': self.PGER_INICIAL_CONV,
 
             # Geradores eólicos
             'NGER_EOL': self.NGER_EOL,
