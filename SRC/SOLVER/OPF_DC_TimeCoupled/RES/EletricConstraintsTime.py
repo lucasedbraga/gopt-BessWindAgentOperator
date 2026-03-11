@@ -1,77 +1,107 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Restrições elétricas: fluxo nas linhas, limites, balanço de potência.
+Restrições elétricas: fluxo nas linhas, limites, balanço de potência (PyOptInterface).
 """
-from pyomo.environ import *
+import numpy as np
+import pyoptinterface as poi
+from pyoptinterface import highs
+from typing import Dict, List, Optional
 
 class ElectricConstraints:
-    """Restrições da rede elétrica."""
+    """Restrições da rede elétrica para PyOptInterface."""
 
     @staticmethod
-    def add_constraints(model, sistema, considerar_perdas=False):
+    def add_constraints(
+        model: highs.Model,
+        sistema,
+        T: int,
+        ANG: Dict,
+        FLUXO_LIN: Dict,
+        DEFICIT: Dict,
+        PLOAD: np.ndarray,
+        PGER: Dict,
+        conv_gen_to_bar: List[int],
+        PGWIND: Optional[Dict] = None,
+        wind_gen_to_bar: Optional[List[int]] = None,
+        CHARGE: Optional[Dict] = None,
+        DISCHARGE: Optional[Dict] = None,
+        battery_list: Optional[List[int]] = None,
+        PERDAS_BARRA: Optional[np.ndarray] = None,
+        considerar_perdas: bool = False
+    ) -> List:
         """
-        Adiciona restrições de fluxo, limites de linha e balanço de potência.
-        - model: modelo Pyomo (deve ter T, BUSES, LINES, ANG, FLUXO_LIN, DEFICIT, etc.)
-        - sistema: objeto com dados da rede
-        - considerar_perdas: se True, inclui perdas no balanço (model deve ter PERDAS_BARRA)
+        Adiciona restrições de fluxo DC, limites de linha e balanço de potência.
+        Retorna a lista de restrições de balanço (para duais).
         """
-        # --------------------------------------------------------------------
-        # Definição do fluxo de potência (DC)
-        # --------------------------------------------------------------------
-        def flow_def_rule(m, t, e):
-            i = sistema.line_fr[e]
-            j = sistema.line_to[e]
-            return m.FLUXO_LIN[t, e] == (m.ANG[t, i] - m.ANG[t, j]) / sistema.x_line[e]
-        model.FlowDef = Constraint(model.T, model.LINES, rule=flow_def_rule)
+        balance_constraints = []
 
-        # --------------------------------------------------------------------
-        # Limites de fluxo
-        # --------------------------------------------------------------------
-        def flow_limits_rule(m, t, e):
-            return inequality(-sistema.FLIM[e], m.FLUXO_LIN[t, e], sistema.FLIM[e])
-        model.FlowLimits = Constraint(model.T, model.LINES, rule=flow_limits_rule)
+        # 1. Definição do fluxo de potência (DC)
+        for t in range(T):
+            for e in range(sistema.NLIN):
+                i = sistema.line_fr[e]
+                j = sistema.line_to[e]
+                x = sistema.x_line[e]
+                expr = FLUXO_LIN[t, e] - (ANG[t, i] - ANG[t, j]) / x
+                model.add_linear_constraint(expr == 0, name=f"flow_def_{t}_{e}")
 
-        # --------------------------------------------------------------------
-        # Limites de déficit (opcional)
-        # --------------------------------------------------------------------
-        def deficit_limits_rule(m, t, b):
-            return m.DEFICIT[t, b] <= 2 * m.PLOAD[t, b]  # exemplo: até 2x a carga
-        model.DeficitLimits = Constraint(model.T, model.BUSES, rule=deficit_limits_rule)
+        # 2. Limites de fluxo
+        for t in range(T):
+            for e in range(sistema.NLIN):
+                flim = sistema.FLIM[e]
+                model.add_linear_constraint(FLUXO_LIN[t, e] >= -flim, name=f"flow_lb_{t}_{e}")
+                model.add_linear_constraint(FLUXO_LIN[t, e] <= flim, name=f"flow_ub_{t}_{e}")
 
-        # --------------------------------------------------------------------
-        # Balanço de potência em cada barra
-        # --------------------------------------------------------------------
-        def power_balance_rule(m, t, b):
-            # Geração térmica na barra
-            ger_conv = sum(m.PGER[t, g] for g in m.CONV_GENERATORS if sistema.BARPG_CONV[g] == b)
+        # 3. Limites de déficit (opcional)
+        for t in range(T):
+            for b in range(sistema.NBAR):
+                model.add_linear_constraint(
+                    DEFICIT[t, b] <= 2.0 * PLOAD[t, b],
+                    name=f"deficit_limit_{t}_{b}"
+                )
 
-            # Geração eólica na barra
-            ger_eol = 0
-            if hasattr(m, 'WIND_GENERATORS') and len(m.WIND_GENERATORS) > 0:
-                ger_eol = sum(m.PGWIND[t, w] for w in m.WIND_GENERATORS if sistema.BARPG_EOL[w] == b)
+        # 4. Balanço de potência em cada barra
+        for t in range(T):
+            for b in range(sistema.NBAR):
+                # Geração térmica na barra
+                thermal_sum = 0
+                for g in range(sistema.NGER_CONV):
+                    if conv_gen_to_bar[g] == b:
+                        thermal_sum += PGER[t, g]
 
-            # Déficit
-            deficit = m.DEFICIT[t, b]
+                # Geração eólica na barra
+                wind_sum = 0
+                if PGWIND is not None and wind_gen_to_bar is not None:
+                    for w in range(sistema.NGER_EOL):
+                        if wind_gen_to_bar[w] == b:
+                            wind_sum += PGWIND[t, w]
 
-            # Baterias (se existirem)
-            bateria = 0
-            if hasattr(m, 'BATTERIES') and b in m.BATTERIES:
-                bateria = m.DISCHARGE[t, b] - m.CHARGE[t, b]
+                # Bateria (descarga - carga)
+                battery_net = 0
+                if battery_list is not None and CHARGE is not None and DISCHARGE is not None:
+                    if b in battery_list:
+                        battery_net = DISCHARGE[t, b] - CHARGE[t, b]
 
-            # Fluxo líquido (injetado - retirado)
-            fluxo_liquido = 0
-            for e in m.LINES:
-                if sistema.line_fr[e] == b:
-                    fluxo_liquido += m.FLUXO_LIN[t, e]
-                elif sistema.line_to[e] == b:
-                    fluxo_liquido -= m.FLUXO_LIN[t, e]
+                # Déficit
+                deficit = DEFICIT[t, b]
 
-            # Carga
-            carga = m.PLOAD[t, b]
+                # Fluxo líquido entrando na barra (positivo se entra)
+                flow_net = 0
+                for e in range(sistema.NLIN):
+                    if sistema.line_to[e] == b:
+                        flow_net += FLUXO_LIN[t, e]      # fluxo chegando
+                    elif sistema.line_fr[e] == b:
+                        flow_net -= FLUXO_LIN[t, e]      # fluxo saindo
 
-            # Perdas (se ativadas)
-            perdas = m.PERDAS_BARRA[t, b] if considerar_perdas else 0.0
+                # Carga
+                load = PLOAD[t, b]
 
-            return ger_conv + ger_eol + deficit + bateria - fluxo_liquido == carga + perdas
-        model.PowerBalance = Constraint(model.T, model.BUSES, rule=power_balance_rule)
+                # Perdas (alocadas na barra)
+                losses = PERDAS_BARRA[t, b] if (considerar_perdas and PERDAS_BARRA is not None) else 0.0
+
+                # Equação: geração + (descarga - carga) + fluxo_entrando == carga + perdas
+                expr = thermal_sum + wind_sum + deficit + battery_net + flow_net - load - losses
+                constr = model.add_linear_constraint(expr == 0, name=f"balance_{t}_{b}")
+                balance_constraints.append((t, b, constr))
+
+        return balance_constraints

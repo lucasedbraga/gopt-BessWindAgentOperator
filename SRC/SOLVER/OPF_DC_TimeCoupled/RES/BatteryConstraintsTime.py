@@ -1,30 +1,51 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Restrições para baterias em modelo multi-período (com índice temporal).
-Estilo simplificado, similar à versão sem tempo.
+Restrições para baterias em modelo multi‑período (com índice temporal) – PyOptInterface.
 """
-from pyomo.environ import *
 import numpy as np
+import pyoptinterface as poi
+from pyoptinterface import highs
 
 class BatteryConstraintsTime:
-    """Restrições de bateria para modelos com horizonte de tempo."""
+    """Restrições de bateria para modelos com horizonte de tempo (PyOptInterface)."""
 
     @staticmethod
-    def add_constraints(model, sistema):
-        if not hasattr(model, 'BATTERIES') or len(model.BATTERIES) == 0:
+    def add_constraints(model, sistema, T, battery_list, battery_index,
+                        CHARGE, DISCHARGE, SOC, BatteryOperation,
+                        soc_inicial_list, soc_final_list=None):
+        """
+        Adiciona variáveis e restrições de bateria ao modelo PyOptInterface.
+
+        Parâmetros:
+        -----------
+        model : highs.Model
+            Modelo PyOptInterface.
+        sistema : SistemaLoader
+            Objeto contendo dados do sistema (BATTERY_CAPACITY, BATTERY_MIN_SOC, etc.)
+        T : int
+            Número de períodos.
+        battery_list : list
+            Lista de índices das barras que possuem bateria.
+        battery_index : dict
+            Mapeamento de barra -> índice na lista (opcional, usado para SOC inicial).
+        CHARGE, DISCHARGE, SOC, BatteryOperation : dict
+            Dicionários que serão preenchidos com as variáveis criadas.
+            As chaves serão (t, b) para t em range(T) e b em battery_list.
+        soc_inicial_list : list
+            Lista com os valores iniciais de SOC (MWh) para cada bateria na ordem de battery_list.
+        soc_final_list : list, optional
+            Lista com os valores finais desejados de SOC (MWh) para cada bateria.
+            Se fornecida, adiciona restrição de SOC final.
+        """
+        if not battery_list:
             return
 
-        # Criar variáveis de bateria indexadas no tempo
-        model.SOC = Var(model.T, model.BATTERIES, within=NonNegativeReals)
-        model.CHARGE = Var(model.T, model.BATTERIES, within=NonNegativeReals)
-        model.DISCHARGE = Var(model.T, model.BATTERIES, within=NonNegativeReals)
+        # Eficiências (valores padrão)
+        eff_carga = getattr(sistema, 'BATTERY_CHARGE_EFF', 1)
+        eff_descarga = getattr(sistema, 'BATTERY_DISCHARGE_EFF', 1)
 
-        # Eficiências (com valores padrão)
-        eff_carga = getattr(sistema, 'BATTERY_CHARGE_EFF', 0.9)
-        eff_descarga = getattr(sistema, 'BATTERY_DISCHARGE_EFF', 0.9)
-
-        # Função auxiliar para acessar arrays por índice da barra
+        # Função auxiliar para obter parâmetro por barra
         def get_val(attr, barra, default=0):
             val = getattr(sistema, attr, None)
             if val is None:
@@ -40,53 +61,75 @@ class BatteryConstraintsTime:
                 return val
 
         # --------------------------------------------------------------------
-        # 1. Limites operacionais da bateria (SOC mínimo e máximo)
+        # 1. Criar variáveis
         # --------------------------------------------------------------------
-        def soc_max_rule(m, t, b):
-            return m.SOC[t, b] <= get_val('BATTERY_CAPACITY', b, 0)
-        model.BatterySOCMax = Constraint(model.T, model.BATTERIES, rule=soc_max_rule)
+        for t in range(T):
+            for b in battery_list:
+                # Capacidade e limites
+                cap = get_val('BATTERY_CAPACITY', b, 1.0)          # MWh
+                min_soc = get_val('BATTERY_MIN_SOC', b, 0.1)      # pu da capacidade
+                min_soc_abs = min_soc * cap                        # MWh
+                power_limit = get_val('BATTERY_POWER_LIMIT', b, cap)  # MW
+                power_out = get_val('BATTERY_POWER_OUT', b, cap)      # MW
 
-        def soc_min_rule(m, t, b):
-            # Se BATTERY_MIN_SOC não existir, usa 0.1 como padrão
-            min_soc = get_val('BATTERY_MIN_SOC', b, 0.1)
-            return m.SOC[t, b] >= min_soc
-        model.BatterySOCMin = Constraint(model.T, model.BATTERIES, rule=soc_min_rule)
-
-        # --------------------------------------------------------------------
-        # 2. Limites de potência de carga/descarga
-        # --------------------------------------------------------------------
-        def charge_limit_rule(m, t, b):
-            return m.CHARGE[t, b] <= get_val('BATTERY_POWER_LIMIT', b, 0)
-        model.BatteryChargeLimit = Constraint(model.T, model.BATTERIES, rule=charge_limit_rule)
-
-        def discharge_limit_rule(m, t, b):
-            return m.DISCHARGE[t, b] <= get_val('BATTERY_POWER_OUT', b, 0)
-        model.BatteryDischargeLimit = Constraint(model.T, model.BATTERIES, rule=discharge_limit_rule)
-
-        # --------------------------------------------------------------------
-        # 3. Condição inicial (SOC do primeiro período)
-        # --------------------------------------------------------------------
-        def soc_initial_rule(m, b):
-            soc_init = get_val('SOC_inicial', b, 0)
-            return m.SOC[0, b] == soc_init
-        model.BatterySOCInitial = Constraint(model.BATTERIES, rule=soc_initial_rule)
-
-        # --------------------------------------------------------------------
-        # 4. Evolução do SOC (acoplamento temporal)
-        # --------------------------------------------------------------------
-        def soc_evolution_rule(m, t, b):
-            if t == 0:
-                return Constraint.Skip  # já tratado no initial
-            else:
-                return m.SOC[t, b] == m.SOC[t-1, b] + eff_carga * m.CHARGE[t, b] - (m.DISCHARGE[t, b] / eff_descarga)
-        model.BatterySOCEvolution = Constraint(model.T, model.BATTERIES, rule=soc_evolution_rule)
+                SOC[t, b] = model.add_variable(
+                    lb=min_soc_abs,
+                    ub=cap,
+                    name=f"SOC_{t}_{b}"
+                )
+                CHARGE[t, b] = model.add_variable(
+                    lb=0,
+                    ub=power_limit,
+                    name=f"CHARGE_{t}_{b}"
+                )
+                DISCHARGE[t, b] = model.add_variable(
+                    lb=0,
+                    ub=power_out,
+                    name=f"DISCHARGE_{t}_{b}"
+                )
+                BatteryOperation[t, b] = model.add_variable(
+                    lb=-power_out,      # pode ser negativa (carga líquida)
+                    ub=power_out,
+                    name=f"BatteryOperation_{t}_{b}"
+                )
 
         # --------------------------------------------------------------------
-        # 5. Definição da operação líquida (opcional, para extração)
+        # 2. Restrições
         # --------------------------------------------------------------------
-        # Cria uma variável para a operação líquida (descarga - carga) em cada período
-        model.BatteryOperation = Var(model.T, model.BATTERIES, within=Reals)
+        # 2a. Limites de SOC (já definidos nos bounds, mas podemos reforçar se necessário)
 
-        def battery_operation_rule(m, t, b):
-            return m.BatteryOperation[t, b] == m.DISCHARGE[t, b] - m.CHARGE[t, b]
-        model.BatteryOperationDef = Constraint(model.T, model.BATTERIES, rule=battery_operation_rule)
+        # 2b. Limites de potência já estão nos bounds, não precisam de restrição extra.
+
+        # 2c. Condição inicial
+        for i, b in enumerate(battery_list):
+            model.add_linear_constraint(
+                SOC[0, b] == soc_inicial_list[i] + eff_carga * CHARGE[t, b] -
+                    DISCHARGE[t, b] / eff_descarga,
+                name=f"SOC_init_{b}"
+            )
+
+        # 2d. Evolução do SOC
+        for t in range(1, T):
+            for b in battery_list:
+                expr = SOC[t, b] - (
+                    SOC[t-1, b] +
+                    eff_carga * CHARGE[t, b] -
+                    DISCHARGE[t, b] / eff_descarga
+                )
+                model.add_linear_constraint(expr == 0, name=f"SOC_evolution_{t}_{b}")
+
+        # 2e. Definição da operação líquida (BatteryOperation = DISCHARGE - CHARGE)
+        for t in range(T):
+            for b in battery_list:
+                model.add_linear_constraint(
+                    BatteryOperation[t, b] == DISCHARGE[t, b] - CHARGE[t, b],
+                    name=f"BatteryOperation_def_{t}_{b}"
+                )
+
+        # 2f. SOC final (opcional)
+        if soc_final_list is not None:
+            for i, b in enumerate(battery_list):
+                model.add_linear_constraint(
+                    SOC[T-1, b] == soc_final_list[i],
+                    name=f"SOC_final_{b}"
+                )

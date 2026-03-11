@@ -1,43 +1,58 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Função objetivo para minimização do custo total de operação (PyOptInterface).
+"""
+import pyoptinterface as poi
 
-from pyomo.environ import *
-# =============================================================================
-# Função objetivo (
-# integrada no script, conforme solicitado)
-# =============================================================================
 class ObjectiveFunction:
     """Função objetivo para minimização do custo total de operação."""
-    
-    @staticmethod
-    def add_objective(model, sistema):
-        """
-        Adiciona a função objetivo ao modelo.
-        Considera custos de geração térmica, penalidade de corte eólico, déficit e operação das baterias.
-        """
-        def objective_rule(m):
-            total = 0
-            # Custo dos geradores térmicos
-            if hasattr(sistema, 'CPG_CONV'):
-                for t in m.T:
-                    for g in m.CONV_GENERATORS:
-                        total += sistema.CPG_CONV[g] * m.PGER[t, g]
-            # Penalidade por corte eólico
-            if hasattr(m, 'WIND_GENERATORS') and len(m.WIND_GENERATORS) > 0 and hasattr(sistema, 'CPG_CURTAILMENT'):
-                for t in m.T:
-                    for w in m.WIND_GENERATORS:
-                        total += sistema.CPG_CURTAILMENT[w] * m.CURTAILMENT[t, w]
-            # Custo do déficit
-            if hasattr(sistema, 'CPG_DEFICIT'):
-                for t in m.T:
-                    for b in m.BUSES:
-                        total += sistema.CPG_DEFICIT * m.DEFICIT[t, b]
-            # Custo de operação das baterias (desgaste)
-            if hasattr(m, 'BATTERIES') and len(m.BATTERIES) > 0 and hasattr(sistema, 'BATTERY_COST'):
-                for t in m.T:
-                    for b in m.BATTERIES:
-                        # Supondo que BATTERY_COST seja um vetor indexado por barra
-                        custo_bateria = sistema.BATTERY_COST[b] if hasattr(sistema.BATTERY_COST, '__getitem__') else sistema.BATTERY_COST
-                        total += custo_bateria * (m.CHARGE[t, b] + m.DISCHARGE[t, b])
-            return total
-        
-        model.TotalCost = Objective(rule=objective_rule, sense=minimize)
 
+    @staticmethod
+    def add_objective_pyopt(model_instance):
+        """
+        Adiciona a função objetivo ao modelo PyOptInterface.
+
+        Parâmetros:
+        -----------
+        model_instance : TimeCoupledOPFModelPyOptInterface
+            Instância do modelo contendo as variáveis e sistema.
+        """
+        s = model_instance.sistema
+        T = model_instance.horizon_time
+        expr = 0.0
+
+        # 1. Custo dos geradores térmicos
+        if hasattr(s, 'CPG_CONV'):
+            for t in range(T):
+                for g in range(s.NGER_CONV):
+                    expr += s.CPG_CONV[g] * model_instance.PGER[t, g]
+
+        # 2. Penalidade por corte eólico
+        if (hasattr(s, 'CPG_CURTAILMENT') and 
+            hasattr(model_instance, 'CURTAILMENT') and 
+            model_instance.CURTAILMENT):
+            for t in range(T):
+                for w in range(s.NGER_EOL):
+                    expr += s.CPG_CURTAILMENT[w] * model_instance.CURTAILMENT[t, w]
+
+        # 3. Custo do déficit (penalidade alta)
+        if hasattr(s, 'CPG_DEFICIT'):
+            for t in range(T):
+                for b in range(s.NBAR):
+                    expr += s.CPG_DEFICIT * model_instance.DEFICIT[t, b]
+
+        # 4. Custo de operação das baterias (desgaste)
+        if (hasattr(model_instance, 'CHARGE') and model_instance.CHARGE and 
+            hasattr(s, 'BATTERY_COST')):
+            for t in range(T):
+                for b in model_instance._battery_list:
+                    # Se BATTERY_COST for um vetor indexado por barra, pegar o valor correspondente
+                    if hasattr(s.BATTERY_COST, '__getitem__') and b < len(s.BATTERY_COST):
+                        custo_bateria = s.BATTERY_COST[b]
+                    else:
+                        custo_bateria = s.BATTERY_COST  # assume escalar
+                    expr += custo_bateria * (model_instance.CHARGE[t, b] + model_instance.DISCHARGE[t, b])
+
+        # Define a função objetivo no modelo (minimização)
+        model_instance.model.set_objective(expr, poi.ObjectiveSense.Minimize)

@@ -449,7 +449,7 @@ def main():
         barras_bateria = sistema.BATTERIES if hasattr(sistema, 'BATTERIES') else []
         pmax_eol = getattr(sistema, 'PMAX_EOL', [1.0]*sistema.NGER_EOL)
 
-        db_handler = OPF_DBHandler('DATA/output/resultados_OPF_RNA.db')
+        db_handler = OPF_DBHandler('DATA/output/RNA_resultados_OPF_Agentic.db')
         db_handler.create_tables()
         cen_id = datetime.now().strftime('%Y%m%d%H%M%S')
         print(f"   ✓ Cenário ID: {cen_id}")
