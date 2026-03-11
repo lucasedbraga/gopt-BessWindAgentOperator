@@ -44,8 +44,10 @@ REMOVE_CONSTANT_COLUMNS = True      # se True, remove colunas com valores consta
 # ========================================================
 
 def load_data(db_path):
-    """Carrega os dados do banco SQLite."""
+    """Carrega os dados do banco SQLite.""" 
+
     conn = sqlite3.connect(db_path)
+    
     query = '''
         SELECT cen_id,
                data_simulacao,
@@ -59,9 +61,12 @@ def load_data(db_path):
                CURTAILMENT_total_result,
                BESS_operation_result
         FROM DBAR_results
+        WHERE hora_simulacao IN (4,5,6)
     '''
+
     df = pd.read_sql_query(query, conn)
     conn.close()
+
     return df
 
 def create_wide_format(df, barras_com_medicao):

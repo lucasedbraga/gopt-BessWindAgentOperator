@@ -23,7 +23,7 @@ from DB.DBhandler_OPF import OPF_DBHandler
 from UTILS.EvaluateFactors import EvaluateFactors
 
 # Import da classe do modelo acoplado (versão PyOptInterface)
-from SOLVER.OPF_DC_TimeCoupled.DC_OPF_BESS_Acoplado import TimeCoupledOPFModel
+from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 
 # ==============================================================================================
 
@@ -31,7 +31,7 @@ from SOLVER.OPF_DC_TimeCoupled.DC_OPF_BESS_Acoplado import TimeCoupledOPFModel
 JSON_PATH = "DATA/input/B6L8_BASE.json"        # arquivo do sistema
 DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
 
-N_ITERACOES = 3         # número total de cenários
+N_ITERACOES = 500         # número total de cenários
 N_DIAS = 30             # dias por simulação
 N_HORAS = 24            # horas por dia
 

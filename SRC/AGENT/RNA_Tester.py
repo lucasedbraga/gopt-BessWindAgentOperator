@@ -36,7 +36,7 @@ TOLERANCE_REL = 0.05
 TOLERANCE_ABS = 0.1
 
 # Parâmetros da geração de cenários
-N_ITERACOES = 3
+N_ITERACOES = 100
 N_DIAS = 30
 N_HORAS = 24
 SOC_INICIAL_FRACAO = 0.5
@@ -61,7 +61,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from UTILS.SystemLoader import SistemaLoader
 from DB.DBhandler_OPF import OPF_DBHandler
 from UTILS.EvaluateFactors import EvaluateFactors
-from SOLVER.OPF_DC_TimeCoupled.DC_OPF_BESS_Acoplado import TimeCoupledOPFModel
+from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 
 # ========== Context manager para suprimir saída ==========
 @contextmanager
