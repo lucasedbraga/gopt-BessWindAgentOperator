@@ -212,3 +212,4 @@ IHM/PowerBalance.ipynb
 IHM/LinesOperation.ipynb
 IHM/PowerBalance.ipynb
 .token/*
+.venv/*
