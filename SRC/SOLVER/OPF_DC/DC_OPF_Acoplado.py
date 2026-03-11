@@ -17,10 +17,10 @@ import traceback
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from SOLVER.OPF_DC_TimeCoupled.RES.BatteryConstraintsTime import BatteryConstraintsTime
-from SOLVER.OPF_DC_TimeCoupled.RES.ThermalGeneratorConstraintsTime import ThermalGeneratorConstraints
-from SOLVER.OPF_DC_TimeCoupled.RES.WindGeneratorConstraintsTime import WindGeneratorConstraints
-from SOLVER.OPF_DC_TimeCoupled.RES.EletricConstraintsTime import ElectricConstraints
+from SOLVER.OPF_DC.RES.BatteryConstraints import BatteryConstraintsTime
+from SOLVER.OPF_DC.RES.ThermalGeneratorConstraints import ThermalGeneratorConstraints
+from SOLVER.OPF_DC.RES.WindGeneratorConstraints import WindGeneratorConstraints
+from SOLVER.OPF_DC.RES.EletricConstraints import ElectricConstraints
 from DB.DBmodel_OPF import TimeCoupledOPFResult, TimeCoupledOPFSnapshotResult
 
 
@@ -332,8 +332,8 @@ class TimeCoupledOPFModel:
 
     def add_FOB(self) -> None:
         """Função objetivo: minimizar custo de geração térmica + penalidade de déficit."""
-        from SOLVER.OPF_DC_TimeCoupled.FOB import EconomicDispatchTime
-        EconomicDispatchTime.ObjectiveFunction.add_objective_pyopt(self)
+        from SOLVER.OPF_DC.FOB import EconomicDispatch
+        EconomicDispatch.ObjectiveFunction.add_objective_pyopt(self)
 
     # -------------------------------------------------------------------------
     # Métodos para perdas iterativas

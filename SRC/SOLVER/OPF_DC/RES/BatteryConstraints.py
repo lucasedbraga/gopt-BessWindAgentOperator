@@ -7,7 +7,7 @@ import numpy as np
 import pyoptinterface as poi
 from pyoptinterface import highs
 
-class BatteryConstraintsTime:
+class BatteryConstraints:
     """Restrições de bateria para modelos com horizonte de tempo (PyOptInterface)."""
 
     @staticmethod
