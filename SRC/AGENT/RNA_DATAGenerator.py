@@ -3,7 +3,7 @@
 DATAGenerator_TimeCoupled.py
 
 Gera múltiplos cenários de simulação multi-dia utilizando o modelo integrado no tempo
-(TimeCoupledOPFModel), que considera todos os períodos em um único problema de otimização
+(TimeCoupledOPFModelPyOptInterface), que considera todos os períodos em um único problema de otimização
 com restrições de bateria e perdas iterativas. Cada cenário é salvo no banco SQLite.
 """
 
@@ -13,6 +13,7 @@ import time
 import traceback
 import numpy as np
 from datetime import datetime
+import secrets
 
 # Ajusta o path para encontrar os módulos do projeto
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,20 +22,16 @@ from UTILS.SystemLoader import SistemaLoader
 from DB.DBhandler_OPF import OPF_DBHandler
 from UTILS.EvaluateFactors import EvaluateFactors
 
-# Import correto da classe do modelo acoplado
+# Import da classe do modelo acoplado (versão PyOptInterface)
 from SOLVER.OPF_DC_TimeCoupled.DC_OPF_BESS_Acoplado import TimeCoupledOPFModel
-from UTILS.SystemLoader import SistemaLoader
-from DB.DBhandler_OPF import OPF_DBHandler
-from UTILS.EvaluateFactors import EvaluateFactors
-
 
 # ==============================================================================================
 
 # Configurações
-JSON_PATH = "DATA/input/3barras_BASE.json"        # arquivo do sistema
-DB_PATH = "DATA/output/resultados_PL_acoplado_RNA.db"
+JSON_PATH = "DATA/input/B6L8_BASE.json"        # arquivo do sistema
+DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
 
-N_ITERACOES = 5         # número total de cenários
+N_ITERACOES = 3         # número total de cenários
 N_DIAS = 30             # dias por simulação
 N_HORAS = 24            # horas por dia
 
@@ -44,9 +41,10 @@ SOC_FINAL_FRACAO = 0.5     # 50% da capacidade (pode ser alterado no loop)
 
 # Opções do modelo
 CONSIDERAR_PERDAS = True
-SOLVER_NAME = 'glpk'
+SOLVER_NAME = 'highs'       # alterado para highs (solver padrão do PyOptInterface)
 TOL = 1e-4
-MAX_ITER = 10
+MAX_ITER = 5
+WRITE_LP = False            # não escrever arquivos LP para cada cenário (evita excesso)
 
 # Para reprodutibilidade, comente a linha abaixo se quiser total aleatoriedade
 # np.random.seed(42)
@@ -54,7 +52,7 @@ MAX_ITER = 10
 
 def main():
     print("=" * 70)
-    print("GERADOR DE DADOS COM MODELO INTEGRADO NO TEMPO (DC OPF) - COM PERDAS ITERATIVAS")
+    print("GERADOR DE DADOS COM MODELO INTEGRADO NO TEMPO (DC OPF) - PyOptInterface")
     print(f"Total de iterações: {N_ITERACOES}")
     print("=" * 70)
 
@@ -108,8 +106,7 @@ def main():
             # -----------------------------------------------------------------
             # Gerar fatores de carga e vento para este cenário
             # -----------------------------------------------------------------
-            # Usamos EvaluateFactors com uma seed variável para garantir diversidade
-            seed = i + 42  # ou np.random.randint(10000)
+            seed = secrets.randbits(32)  # semente variável
             avaliador = EvaluateFactors(
                 sistema=sistema,
                 n_dias=N_DIAS,
@@ -121,8 +118,8 @@ def main():
             fatores_carga, fatores_vento = avaliador.gerar_tudo()
 
             # (Opcional) Variar SOC inicial/final aleatoriamente
-            soc_inicial_frac = SOC_INICIAL_FRACAO  # ou np.random.uniform(0, 1)
-            soc_final_frac = SOC_FINAL_FRACAO      # ou np.random.uniform(0, 1)
+            soc_inicial_frac = SOC_INICIAL_FRACAO  
+            soc_final_frac = SOC_FINAL_FRACAO
 
             # -----------------------------------------------------------------
             # Resolver o problema integrado
@@ -135,27 +132,9 @@ def main():
                 soc_final=soc_final_frac,
                 cen_id=cen_id,
                 tol=TOL,
-                max_iter=MAX_ITER
+                max_iter=MAX_ITER,
+                write_lp=WRITE_LP
             )
-
-            # # -----------------------------------------------------------------
-            # # Extrair resultados e salvar manualmente (caso o modelo não salve)
-            # # -----------------------------------------------------------------
-            # resultados = modelo.extract_results()
-
-            # # Contar snapshots com sucesso
-            # snaps_ok = 0
-            # for snapshot in resultados.snapshots:
-            #     db_handler.save_hourly_result(
-            #         resultado=snapshot,
-            #         sistema=sistema,
-            #         hora=snapshot.hora,
-            #         solver_name=SOLVER_NAME,
-            #         dia=f"{snapshot.dia+1}",
-            #         cen_id=cen_id
-            #     )
-            #     if snapshot.sucesso:
-            #         snaps_ok += 1
 
             print(f"   [{i+1:5d}/{N_ITERACOES}] Cenário {cen_id} concluído")
 
