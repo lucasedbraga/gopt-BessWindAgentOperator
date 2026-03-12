@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Classe principal do modelo de otimização multi-período acoplado (DC OPF) com suporte a baterias e perdas iterativas.
-Versão traduzida para PyOptInterface.
-Utiliza módulos separados para cada grupo de restrições (já adaptados).
+Modelo de otimização multi‑período acoplado (DC OPF) com suporte a baterias e perdas iterativas.
+Versão refatorada com todas as grandezas em pu, seguindo o padrão do snapshot.
+Utiliza as classes de restrição externas (BatteryConstraints, ThermalGeneratorConstraints,
+WindGeneratorConstraints, ElectricConstraints).
 """
 
 import os
@@ -11,13 +12,13 @@ import sys
 import numpy as np
 import pyoptinterface as poi
 from pyoptinterface import highs
-from typing import List, Union, Optional, Tuple, Dict
+from typing import List, Union, Optional, Tuple, Dict, Callable
 import traceback
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from SOLVER.OPF_DC.RES.BatteryConstraints import BatteryConstraintsTime
+from SOLVER.OPF_DC.RES.BatteryConstraints import BatteryConstraints
 from SOLVER.OPF_DC.RES.ThermalGeneratorConstraints import ThermalGeneratorConstraints
 from SOLVER.OPF_DC.RES.WindGeneratorConstraints import WindGeneratorConstraints
 from SOLVER.OPF_DC.RES.EletricConstraints import ElectricConstraints
@@ -26,9 +27,9 @@ from DB.DBmodel_OPF import TimeCoupledOPFResult, TimeCoupledOPFSnapshotResult
 
 class TimeCoupledOPFModel:
     """
-    Modelo de otimização multi‑período com acoplamento temporal integrado (PyOptInterface).
-    As variáveis são indexadas no tempo (períodos = n_dias * n_horas).
-    Delega a construção de restrições para módulos específicos.
+    Modelo de otimização multi‑período com acoplamento temporal (PyOptInterface).
+    Todas as grandezas de potência e energia são tratadas em pu (por unidade).
+    As variáveis são indexadas por (t, idx) e as restrições são delegadas a classes externas.
     """
 
     def __init__(self,
@@ -49,15 +50,8 @@ class TimeCoupledOPFModel:
         # Modelo PyOptInterface
         self.model = None
         self._solved = False
-        self._battery_list: List[int] = []
-        self._battery_index: Dict[int, int] = {}
-        self._perdas_calculadas: Optional[np.ndarray] = None
-        self._soc_inicial_list: List[float] = []
-        self._soc_final_list: List[float] = []
-        self._fator_carga: Optional[np.ndarray] = None
-        self._fator_vento: Optional[np.ndarray] = None
 
-        # Dicionários para armazenar variáveis
+        # Dicionários para variáveis (chave (t, idx))
         self.PGER: Dict[Tuple[int, int], poi.Variable] = {}
         self.PGWIND: Dict[Tuple[int, int], poi.Variable] = {}
         self.CURTAILMENT: Dict[Tuple[int, int], poi.Variable] = {}
@@ -70,122 +64,212 @@ class TimeCoupledOPFModel:
         self.SOC: Dict[Tuple[int, int], poi.Variable] = {}
         self.BatteryOperation: Dict[Tuple[int, int], poi.Variable] = {}
 
-        # Parâmetros (arrays)
-        self.PLOAD: Optional[np.ndarray] = None
-        self.PGWIND_AVAIL: Optional[np.ndarray] = None
+        # Parâmetros (arrays em pu)
+        self.PLOAD: Optional[np.ndarray] = None          # (T, n_bus)
+        self.PGWIND_AVAIL: Optional[np.ndarray] = None   # (T, n_wind)
 
-        # Lista de restrições de balanço (para remoção/recriação)
+        # Lista de restrições de balanço (para iterações de perdas)
         self.balance_constraints: List[Tuple[int, int, poi.Constraint]] = []
 
-    # -------------------------------------------------------------------------
+        # Listas de SOC inicial/final (pu)
+        self._battery_list: List[int] = []
+        self._battery_index: Dict[int, int] = {}
+        self._soc_inicial_list: List[float] = []
+        self._soc_final_list: List[float] = []
+
+        # Perdas (atualizadas iterativamente) em pu
+        self._perdas_calculadas: Optional[np.ndarray] = None
+
+    # ----------------------------------------------------------------------
     # Construção do modelo
-    # -------------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     def build(self,
               fator_carga: Optional[np.ndarray] = None,
               fator_vento: Optional[np.ndarray] = None,
               soc_inicial: Union[float, List[float]] = 0.5,
-              soc_final: Union[float, List[float]] = 0.5) -> None:
+              soc_final: Optional[Union[float, List[float]]] = None) -> None:
         """
-        Constrói o modelo monolítico com variáveis temporais.
-        soc_inicial e soc_final devem ser frações da capacidade (0 a 1).
+        Constrói o modelo com variáveis temporais.
+
+        Parâmetros:
+        -----------
+        fator_carga : np.ndarray, opcional
+            Fatores de carga, shape (n_dias, n_horas, n_bus) ou (n_dias, n_horas).
+        fator_vento : np.ndarray, opcional
+            Fatores de vento, shape (n_dias, n_horas, n_wind) ou (n_dias, n_horas).
+        soc_inicial : float ou list
+            SOC inicial (fração da capacidade) para cada bateria.
+        soc_final : float ou list, opcional
+            SOC final desejado (fração da capacidade) para cada bateria.
         """
         s = self.sistema
         T = self.horizon_time
 
-        # ==================== Processamento dos fatores de carga e vento ====================
-        # (mesma lógica da versão Pyomo, já testada)
-        if fator_carga is not None:
-            if (fator_carga.ndim == 3 and fator_carga.shape[0] == self.n_dias
-                    and fator_carga.shape[1] == self.n_horas):
-                fator_carga = fator_carga.reshape((T, s.NBAR))
-            elif (fator_carga.ndim == 2 and fator_carga.shape[0] == self.n_dias
-                  and fator_carga.shape[1] == self.n_horas):
-                fator_carga = np.repeat(fator_carga.reshape((T, 1)), s.NBAR, axis=1)
-            elif fator_carga.ndim == 2 and fator_carga.shape[1] != s.NBAR:
-                fator_carga = np.repeat(fator_carga, s.NBAR, axis=1)
-            elif fator_carga.ndim == 1:
-                fator_carga = np.tile(fator_carga.reshape(-1, 1), (1, s.NBAR))
-        else:
-            fator_carga = np.ones((T, s.NBAR))
-        if fator_carga.shape != (T, s.NBAR):
-            raise ValueError(f"fator_carga shape {fator_carga.shape} != {(T, s.NBAR)}")
+        # ------------------------------------------------------------------
+        # Processar fatores de carga e vento -> arrays 2D (T, n_bus) e (T, n_wind) em pu
+        # ------------------------------------------------------------------
+        self._process_fatores(fator_carga, fator_vento)
 
-        if fator_vento is not None:
-            if fator_vento.ndim == 3 and fator_vento.shape[0] == self.n_dias and fator_vento.shape[1] == self.n_horas:
-                fator_vento = fator_vento.reshape((T, s.NGER_EOL))
-            elif fator_vento.ndim == 2 and fator_vento.shape[0] == self.n_dias and fator_vento.shape[1] == self.n_horas:
-                if s.NGER_EOL > 0:
-                    fator_vento = np.repeat(fator_vento.reshape((T, 1)), s.NGER_EOL, axis=1)
-                else:
-                    fator_vento = np.ones((T, 0))
-            elif fator_vento.ndim == 1:
-                if s.NGER_EOL > 0:
-                    fator_vento = np.tile(fator_vento.reshape(-1, 1), (1, s.NGER_EOL))
-                else:
-                    fator_vento = np.ones((T, 0))
-            elif fator_vento.ndim == 2 and fator_vento.shape[1] != s.NGER_EOL:
-                if s.NGER_EOL > 0:
-                    fator_vento = np.repeat(fator_vento, s.NGER_EOL, axis=1)
-                else:
-                    fator_vento = np.ones((T, 0))
-        else:
-            fator_vento = np.ones((T, s.NGER_EOL)) if s.NGER_EOL > 0 else np.ones((T, 0))
-        if fator_vento.shape != (T, max(s.NGER_EOL, 0)):
-            raise ValueError(f"fator_vento shape {fator_vento.shape} != {(T, s.NGER_EOL)}")
+        # ------------------------------------------------------------------
+        # Processar SOC inicial/final (converter fração -> pu)
+        # ------------------------------------------------------------------
+        self._process_soc(soc_inicial, soc_final)
 
-        # ==================== Inicializar modelo PyOptInterface ====================
+        # ------------------------------------------------------------------
+        # Inicializar modelo
+        # ------------------------------------------------------------------
         self.model = highs.Model()
 
-        # ==================== Parâmetros (arrays) ====================
-        self.PLOAD = np.zeros((T, s.NBAR))
-        for t in range(T):
-            for b in range(s.NBAR):
-                self.PLOAD[t, b] = s.PLOAD[b] * fator_carga[t, b]
+        # ------------------------------------------------------------------
+        # Criar variáveis (todas com limites em pu)
+        # ------------------------------------------------------------------
+        self._create_thermal_vars()
+        self._create_wind_vars()
+        self._create_deficit_vars()
+        self._create_voltage_vars()
+        self._create_angle_vars()
+        self._create_flow_vars()
+        self._create_battery_vars()
 
-        if s.NGER_EOL > 0:
-            self.PGWIND_AVAIL = np.zeros((T, s.NGER_EOL))
-            for t in range(T):
-                for w in range(s.NGER_EOL):
-                    self.PGWIND_AVAIL[t, w] = s.PGWIND_disponivel[w] * fator_vento[t, w]
+
+        # ------------------------------------------------------------------
+        # Adicionar restrições usando as classes externas
+        # ------------------------------------------------------------------
+        self._add_all_constraints()
+
+        self._solved = False
+
+    def _process_fatores(self, fator_carga, fator_vento):
+        """Converte fatores em arrays 2D (T, n_bus) e (T, n_wind) em pu."""
+        s = self.sistema
+        T = self.horizon_time
+
+        # -------------------- Carga --------------------
+        if fator_carga is None:
+            fc = np.ones((T, s.NBAR))
         else:
-            self.PGWIND_AVAIL = np.zeros((T, 0))
+            fc = np.asarray(fator_carga)
+            # Redimensionar para (T, n_bus)
+            if fc.ndim == 3:  # (n_dias, n_horas, n_bus)
+                fc = fc.reshape((T, s.NBAR))
+            elif fc.ndim == 2:
+                if fc.shape[0] == self.n_dias and fc.shape[1] == self.n_horas:
+                    # Expandir para todas as barras
+                    fc = np.repeat(fc.reshape((T, 1)), s.NBAR, axis=1)
+                elif fc.shape[1] == s.NBAR:
+                    # já está (T, n_bus)
+                    pass
+                else:
+                    raise ValueError("fator_carga com shape incompatível")
+            elif fc.ndim == 1:
+                if fc.size == T:
+                    fc = fc[:, np.newaxis] * np.ones((1, s.NBAR))
+                else:
+                    raise ValueError("fator_carga com shape incompatível")
+        # PLOAD = base_load (pu) * fator_carga
+        self.PLOAD = s.PLOAD[np.newaxis, :] * fc  # (T, n_bus)
 
-        # ==================== Variáveis básicas ====================
-        # Geração térmica
-        for t in range(T):
+        # -------------------- Vento --------------------
+        if s.NGER_EOL == 0:
+            self.PGWIND_AVAIL = np.zeros((T, 0))
+        else:
+            if fator_vento is None:
+                fv = np.ones((T, s.NGER_EOL))
+            else:
+                fv = np.asarray(fator_vento)
+                if fv.ndim == 3:
+                    fv = fv.reshape((T, s.NGER_EOL))
+                elif fv.ndim == 2:
+                    if fv.shape[0] == self.n_dias and fv.shape[1] == self.n_horas:
+                        fv = np.repeat(fv.reshape((T, 1)), s.NGER_EOL, axis=1)
+                    elif fv.shape[1] == s.NGER_EOL:
+                        pass
+                    else:
+                        raise ValueError("fator_vento com shape incompatível")
+                elif fv.ndim == 1:
+                    if fv.size == T:
+                        fv = fv[:, np.newaxis] * np.ones((1, s.NGER_EOL))
+                    else:
+                        raise ValueError("fator_vento com shape incompatível")
+            # PGWIND_AVAIL = capacidade instalada (pu) * fator
+            self.PGWIND_AVAIL = s.PGMAX_EOL_ORIGINAL[np.newaxis, :] * fv  # (T, n_wind)
+
+    def _process_soc(self, soc_inicial, soc_final):
+        """Converte SOC inicial/final (frações) para listas em pu."""
+        s = self.sistema
+        self._battery_list = list(s.BARRAS_COM_BATERIA)
+        self._battery_index = {b: i for i, b in enumerate(self._battery_list)}
+        nb = len(self._battery_list)
+        if nb == 0:
+            return
+
+        # SOC inicial
+        if isinstance(soc_inicial, (float, int)):
+            soc_ini_frac = [soc_inicial] * nb
+        else:
+            soc_ini_frac = list(soc_inicial)
+            if len(soc_ini_frac) != nb:
+                raise ValueError(f"soc_inicial deve ter {nb} elementos")
+        self._soc_inicial_list = [
+            soc_ini_frac[i] * s.BATTERY_CAPACITY[b] for i, b in enumerate(self._battery_list)
+        ]
+
+        # SOC final (opcional)
+        if soc_final is not None:
+            if isinstance(soc_final, (float, int)):
+                soc_fin_frac = [soc_final] * nb
+            else:
+                soc_fin_frac = list(soc_final)
+                if len(soc_fin_frac) != nb:
+                    raise ValueError(f"soc_final deve ter {nb} elementos")
+            self._soc_final_list = [
+                soc_fin_frac[i] * s.BATTERY_CAPACITY[b] for i, b in enumerate(self._battery_list)
+            ]
+        else:
+            self._soc_final_list = []
+
+    # -------------------- Criação de variáveis (bounds em pu) --------------------
+    def _create_thermal_vars(self):
+        s = self.sistema
+        for t in range(self.horizon_time):
             for g in range(s.NGER_CONV):
                 self.PGER[t, g] = self.model.add_variable(
-                    lb=s.PGMIN_CONV[g] * s.SB,
-                    ub=s.PGMAX_CONV[g] * s.SB,
+                    lb=s.PGMIN_CONV[g],          # pu
+                    ub=s.PGMAX_CONV[g],          # pu
                     name=f"PGER_{t}_{g}"
                 )
 
-        # Geração eólica e curtailment
-        if s.NGER_EOL > 0:
-            for t in range(T):
-                for w in range(s.NGER_EOL):
-                    self.PGWIND[t, w] = self.model.add_variable(
-                        lb=0,
-                        ub=self.PGWIND_AVAIL[t, w],
-                        name=f"PGWIND_{t}_{w}"
-                    )
-                    self.CURTAILMENT[t, w] = self.model.add_variable(
-                        lb=0,
-                        ub=self.PGWIND_AVAIL[t, w],
-                        name=f"CURTAILMENT_{t}_{w}"
-                    )
+    def _create_wind_vars(self):
+        if self.sistema.NGER_EOL == 0:
+            return
+        s = self.sistema
+        for t in range(self.horizon_time):
+            for w in range(s.NGER_EOL):
+                avail = self.PGWIND_AVAIL[t, w]
+                self.PGWIND[t, w] = self.model.add_variable(
+                    lb=0,
+                    ub=avail,
+                    name=f"PGWIND_{t}_{w}"
+                )
+                self.CURTAILMENT[t, w] = self.model.add_variable(
+                    lb=0,
+                    ub=avail,
+                    name=f"CURTAILMENT_{t}_{w}"
+                )
 
-        # Déficit
-        for t in range(T):
+    def _create_deficit_vars(self):
+        s = self.sistema
+        for t in range(self.horizon_time):
             for b in range(s.NBAR):
                 self.DEFICIT[t, b] = self.model.add_variable(
                     lb=0,
-                    ub=1e6,  # sem limite superior
+                    ub=1e6,          # sem limite superior efetivo
                     name=f"DEFICIT_{t}_{b}"
                 )
 
-        # Tensão, ângulo, fluxo
-        for t in range(T):
+    def _create_voltage_vars(self):
+        s = self.sistema
+        for t in range(self.horizon_time):
             for b in range(s.NBAR):
                 self.V[t, b] = self.model.add_variable(
                     lb=0.95,
@@ -194,75 +278,82 @@ class TimeCoupledOPFModel:
                 )
                 self.model.add_linear_constraint(self.V[t, b] == 1.0, name=f"fix_V_{t}_{b}")
 
+    def _create_angle_vars(self):
+        s = self.sistema
+        for t in range(self.horizon_time):
             for b in range(s.NBAR):
                 self.ANG[t, b] = self.model.add_variable(
                     lb=-np.pi,
                     ub=np.pi,
                     name=f"ANG_{t}_{b}"
                 )
-                if b == s.slack_idx:
-                    self.model.add_linear_constraint(self.ANG[t, b] == 0.0, name=f"fix_ANG_slack_{t}")
+            # Fixar barra slack
+            self.model.add_linear_constraint(self.ANG[t, s.slack_idx] == 0.0, name=f"fix_ANG_slack_{t}")
 
+    def _create_flow_vars(self):
+        s = self.sistema
+        for t in range(self.horizon_time):
             for e in range(s.NLIN):
                 self.FLUXO_LIN[t, e] = self.model.add_variable(
-                    lb=-s.FLIM[e],
-                    ub=s.FLIM[e],
+                    lb=-s.FLIM[e],    # pu
+                    ub=s.FLIM[e],     # pu
                     name=f"FLUXO_LIN_{t}_{e}"
                 )
+    def _create_battery_vars(self):
+        """Cria variáveis de bateria para todos os períodos e preenche os dicionários."""
+        if not self._battery_list:
+            return
+        s = self.sistema
+        for t in range(self.horizon_time):
+            for i, b in enumerate(self._battery_list):
+                # Capacidade e limites (todos em pu) - garantir que são escalares
+                cap = float(s.BATTERY_CAPACITY[b])                     # energia total
+                min_soc = float(s.BATTERY_MIN_SOC[b]) * cap            # mínimo
+                power_limit = float(s.BATTERY_POWER_LIMIT[b])          # potência de carga
 
-        # ==================== Baterias ====================
-        self._battery_list = list(s.BARRAS_COM_BATERIA)
-        self._battery_index = {b: i for i, b in enumerate(self._battery_list)}
+                # Potência de descarga (pode ser diferente)
+                power_out_attr = getattr(s, 'BATTERY_POWER_OUT', None)
+                if power_out_attr is None:
+                    power_out = power_limit
+                else:
+                    if isinstance(power_out_attr, (list, tuple, np.ndarray)):
+                        power_out = float(power_out_attr[b])
+                    elif isinstance(power_out_attr, dict):
+                        power_out = float(power_out_attr.get(b, power_limit))
+                    else:
+                        power_out = float(power_out_attr)  # assume escalar
 
-        # Garantir arrays (valores em MW/MWh)
-        if not hasattr(s, 'BATTERY_CAPACITY'):
-            s.BATTERY_CAPACITY = np.zeros(s.NBAR)
-        if not hasattr(s, 'BATTERY_MIN_SOC'):
-            s.BATTERY_MIN_SOC = np.zeros(s.NBAR)
-        if not hasattr(s, 'BATTERY_POWER_LIMIT'):
-            s.BATTERY_POWER_LIMIT = np.zeros(s.NBAR)
-        if not hasattr(s, 'BATTERY_POWER_OUT'):
-            s.BATTERY_POWER_OUT = np.zeros(s.NBAR)
-        if not hasattr(s, 'BATTERY_CHARGE_EFF'):
-            s.BATTERY_CHARGE_EFF = 0.9
-        if not hasattr(s, 'BATTERY_DISCHARGE_EFF'):
-            s.BATTERY_DISCHARGE_EFF = 0.9
+                # Variável de carga
+                self.CHARGE[t, b] = self.model.add_variable(
+                    lb=0.0,
+                    ub=power_limit,
+                    name=f"CHARGE_{t}_{b}"
+                )
+                # Variável de descarga
+                self.DISCHARGE[t, b] = self.model.add_variable(
+                    lb=0.0,
+                    ub=power_out,
+                    name=f"DISCHARGE_{t}_{b}"
+                )
+                # Variável de estado de carga (SOC)
+                self.SOC[t, b] = self.model.add_variable(
+                    lb=min_soc,
+                    ub=cap,
+                    name=f"SOC_{t}_{b}"
+                )
+                # Variável de operação líquida (descarga - carga)
+                self.BatteryOperation[t, b] = self.model.add_variable(
+                    lb=-power_out,
+                    ub=power_out,
+                    name=f"BatteryOperation_{t}_{b}"
+                )
 
-        # SOC inicial
-        if isinstance(soc_inicial, (int, float)):
-            soc_inicial_frac = [soc_inicial] * len(self._battery_list)
-        else:
-            soc_inicial_frac = soc_inicial
-        self._soc_inicial_list = [
-            soc_inicial_frac[i] * s.BATTERY_CAPACITY[b] for i, b in enumerate(self._battery_list)
-        ]
-
-        # SOC final
-        if soc_final is not None:
-            if isinstance(soc_final, (int, float)):
-                soc_final_frac = [soc_final] * len(self._battery_list)
-            else:
-                soc_final_frac = soc_final
-            self._soc_final_list = [
-                soc_final_frac[i] * s.BATTERY_CAPACITY[b] for i, b in enumerate(self._battery_list)
-            ]
-        else:
-            self._soc_final_list = []
-
-        # ==================== Adicionar restrições ====================
-        self._add_all_constraints()
-        self.add_FOB()
-
-        self._fator_carga = fator_carga
-        self._fator_vento = fator_vento
-        self._solved = False
-
-    def _add_all_constraints(self) -> None:
-        """Adiciona todas as restrições delegando para os módulos específicos."""
+    # -------------------- Adição de restrições via classes externas --------------------
+    def _add_all_constraints(self):
         s = self.sistema
         T = self.horizon_time
 
-        # Geradores térmicos
+        # 1. Geradores térmicos
         ThermalGeneratorConstraints.add_constraints(
             model=self.model,
             T=T,
@@ -276,8 +367,9 @@ class TimeCoupledOPFModel:
             SB=s.SB
         )
 
-        # Baterias
-        BatteryConstraintsTime.add_constraints(
+        # 2. Baterias
+        if self._battery_list:
+            BatteryConstraints.add_constraints(
                 model=self.model,
                 sistema=s,
                 T=T,
@@ -289,9 +381,9 @@ class TimeCoupledOPFModel:
                 BatteryOperation=self.BatteryOperation,
                 soc_inicial_list=self._soc_inicial_list,
                 soc_final_list=self._soc_final_list if self._soc_final_list else None
-        )
+            )
 
-        # Geradores eólicos
+        # 3. Geradores eólicos
         if s.NGER_EOL > 0:
             WindGeneratorConstraints.add_constraints(
                 model=self.model,
@@ -302,15 +394,15 @@ class TimeCoupledOPFModel:
                 PGWIND_AVAIL=self.PGWIND_AVAIL
             )
 
-        # Mapeamento da barra de cada gerador eólico (correção)
+        # 4. Restrições elétricas
+        # Mapeamento barra dos geradores eólicos
         if hasattr(s, 'bus_wind'):
             wind_gen_to_bar = s.bus_wind
         elif hasattr(s, 'BARPG_EOL'):
             wind_gen_to_bar = s.BARPG_EOL
         else:
-            wind_gen_to_bar = [0] * s.NGER_EOL   # fallback: todos na barra 0
+            wind_gen_to_bar = [0] * s.NGER_EOL
 
-        # Restrições elétricas
         self.balance_constraints = ElectricConstraints.add_constraints(
             model=self.model,
             sistema=s,
@@ -322,7 +414,7 @@ class TimeCoupledOPFModel:
             PGER=self.PGER,
             conv_gen_to_bar=s.BARPG_CONV,
             PGWIND=self.PGWIND if s.NGER_EOL > 0 else None,
-            wind_gen_to_bar=wind_gen_to_bar,          # <-- corrigido
+            wind_gen_to_bar=wind_gen_to_bar,
             CHARGE=self.CHARGE if self._battery_list else None,
             DISCHARGE=self.DISCHARGE if self._battery_list else None,
             battery_list=self._battery_list,
@@ -330,16 +422,50 @@ class TimeCoupledOPFModel:
             considerar_perdas=self.considerar_perdas
         )
 
-    def add_FOB(self) -> None:
-        """Função objetivo: minimizar custo de geração térmica + penalidade de déficit."""
-        from SOLVER.OPF_DC.FOB import EconomicDispatch
-        EconomicDispatch.ObjectiveFunction.add_objective_pyopt(self)
+    # ----------------------------------------------------------------------
+    # Função objetivo
+    # ----------------------------------------------------------------------
+    def build_objective(self, cost_function: Optional[Callable] = None):
+        """
+        Define a função objetivo. Se não for fornecida, usa a soma dos custos horários:
+            custo térmico + penalidade de déficit + penalidade de curtailment.
+        A função customizada deve receber o modelo (self) e retornar uma expressão.
+        """
+        if cost_function is None:
+            expr = 0.0
+            # Custo térmico (USD/pu)
+            for t in range(self.horizon_time):
+                for g in range(self.sistema.NGER_CONV):
+                    custo = float(self.sistema.CPG_CONV[g])          # garantir escalar
+                    expr += custo * self.PGER[t, g]
 
-    # -------------------------------------------------------------------------
+            # Déficit
+            custo_deficit = float(getattr(self.sistema, 'CPG_DEFICIT', 1000.0))
+            for t in range(self.horizon_time):
+                for b in range(self.sistema.NBAR):
+                    expr += custo_deficit * self.DEFICIT[t, b]
+
+            # Curtailment
+            if self.sistema.NGER_EOL > 0:
+                for t in range(self.horizon_time):
+                    for w in range(self.sistema.NGER_EOL):
+                        # Pega o custo para o gerador w, garantindo escalar
+                        if hasattr(self.sistema, 'CPG_CURTAILMENT'):
+                            custo_curtail = float(self.sistema.CPG_CURTAILMENT[w])
+                        else:
+                            custo_curtail = 100.0
+                        expr += custo_curtail * self.CURTAILMENT[t, w]
+
+            self.model.set_objective(expr, poi.ObjectiveSense.Minimize)
+        else:
+            obj_expr = cost_function(self)
+            self.model.set_objective(obj_expr, poi.ObjectiveSense.Minimize)
+
+    # ----------------------------------------------------------------------
     # Métodos para perdas iterativas
-    # -------------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     def calculate_losses(self) -> np.ndarray:
-        """Calcula perdas nas linhas baseado na solução atual."""
+        """Calcula perdas nas linhas baseado na solução atual (resultado em pu)."""
         s = self.sistema
         T = self.horizon_time
         perdas_barra = np.zeros((T, s.NBAR))
@@ -347,28 +473,26 @@ class TimeCoupledOPFModel:
             for e in range(s.NLIN):
                 i = s.line_fr[e]
                 j = s.line_to[e]
-                fluxo_val = self.model.get_value(self.FLUXO_LIN[t, e])
-                r = s.r_line[e]
-                perdas_linha = r * (fluxo_val ** 2) * s.SB
+                fluxo_val = self.model.get_value(self.FLUXO_LIN[t, e])  # pu
+                r = s.r_line[e]                                         # pu
+                perdas_linha = r * (fluxo_val ** 2)                     # pu
                 perdas_barra[t, i] += perdas_linha / 2
                 perdas_barra[t, j] += perdas_linha / 2
         self._perdas_calculadas = perdas_barra
         return perdas_barra
 
     def update_losses(self, perdas_barra: np.ndarray) -> None:
-        """Atualiza o vetor de perdas."""
+        """Atualiza o vetor de perdas (pu)."""
         self._perdas_calculadas = perdas_barra
 
     def solve_iterative(self, solver_name: str = 'highs', tol: float = 1e-4,
-                    max_iter: int = 50, write_lp: bool = True, **solver_args):
-        """
-        Resolve o modelo com iterações de perdas (ponto fixo).
-        O parâmetro write_lp controla a escrita do LP apenas na primeira iteração.
-        """
+                        max_iter: int = 50, write_lp: bool = True, **solver_args):
+        """Resolve o modelo com iterações de perdas (ponto fixo)."""
         if not self.considerar_perdas:
             return self.solve(solver_name, write_lp=write_lp, **solver_args)
 
-        # Primeira solução (pode escrever LP se solicitado)
+        # Primeira solução sem perdas
+        self._perdas_calculadas = np.zeros((self.horizon_time, self.sistema.NBAR))
         raw = self.solve(solver_name, write_lp=write_lp, **solver_args)
         if not self._solved or self.model.get_model_attribute(
                 poi.ModelAttribute.TerminationStatus) != poi.TerminationStatusCode.OPTIMAL:
@@ -376,11 +500,10 @@ class TimeCoupledOPFModel:
             return raw
 
         ang_prev = np.array([[self.model.get_value(self.ANG[t, b])
-                            for b in range(self.sistema.NBAR)]
-                            for t in range(self.horizon_time)])
+                               for b in range(self.sistema.NBAR)]
+                              for t in range(self.horizon_time)])
 
         for it in range(1, max_iter):
-            # Calcular perdas com a solução atual
             perdas = self.calculate_losses()
             self.update_losses(perdas)
 
@@ -388,9 +511,10 @@ class TimeCoupledOPFModel:
             for _, _, constr in self.balance_constraints:
                 self.model.delete_constraint(constr)
 
-            # Recriar restrições de balanço com as novas perdas
+            # Recriar restrições de balanço com novas perdas
             s = self.sistema
             T = self.horizon_time
+            wind_gen_to_bar = getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [0]*s.NGER_EOL))
             self.balance_constraints = ElectricConstraints.add_constraints(
                 model=self.model,
                 sistema=s,
@@ -402,7 +526,7 @@ class TimeCoupledOPFModel:
                 PGER=self.PGER,
                 conv_gen_to_bar=s.BARPG_CONV,
                 PGWIND=self.PGWIND if s.NGER_EOL > 0 else None,
-                wind_gen_to_bar=getattr(s, 'bus_wind', None),
+                wind_gen_to_bar=wind_gen_to_bar,
                 CHARGE=self.CHARGE if self._battery_list else None,
                 DISCHARGE=self.DISCHARGE if self._battery_list else None,
                 battery_list=self._battery_list,
@@ -410,7 +534,6 @@ class TimeCoupledOPFModel:
                 considerar_perdas=self.considerar_perdas
             )
 
-            # Resolver novamente (sem escrever LP)
             raw = self.solve(solver_name, write_lp=False, **solver_args)
             if not self._solved or self.model.get_model_attribute(
                     poi.ModelAttribute.TerminationStatus) != poi.TerminationStatusCode.OPTIMAL:
@@ -418,8 +541,8 @@ class TimeCoupledOPFModel:
                 break
 
             ang_curr = np.array([[self.model.get_value(self.ANG[t, b])
-                                for b in range(self.sistema.NBAR)]
-                                for t in range(self.horizon_time)])
+                                   for b in range(self.sistema.NBAR)]
+                                  for t in range(self.horizon_time)])
             diff = np.max(np.abs(ang_curr - ang_prev))
             print(f"Iteração {it+1}: diff = {diff:.6f}")
             if diff < tol:
@@ -429,35 +552,29 @@ class TimeCoupledOPFModel:
 
         return raw
 
-    def solve(self, solver_name: str = 'highs', write_lp: bool = True, **solver_args):
-        """
-        Resolve o modelo uma única vez.
-        Se write_lp=True, escreve o modelo em formato LP antes de otimizar.
-        """
+    def solve(self, solver_name: str = 'highs', write_lp: bool = False, **solver_args):
+        """Resolve o modelo uma única vez."""
         if self.model is None:
             raise RuntimeError("Modelo não construído. Chame build() primeiro.")
         if write_lp:
             import inspect
-            import os
             frame = inspect.currentframe()
             caller_frame = frame.f_back
             caller_filename = caller_frame.f_code.co_filename
             base = os.path.splitext(os.path.basename(caller_filename))[0]
-            lp_filename = f"DATA/output/{base}.lp"
+            lp_filename = f"DATA/output/{base}_timecoupled.lp"
+            os.makedirs(os.path.dirname(lp_filename), exist_ok=True)
             self.model.write(lp_filename)
             print(f"Modelo escrito em {lp_filename}")
         self.model.optimize()
         self._solved = True
         return self.model
-    
-    # -------------------------------------------------------------------------
-    # Extração de resultados (com verificação de balanço)
-    # -------------------------------------------------------------------------
+
+    # ----------------------------------------------------------------------
+    # Extração de resultados (converte pu → MW)
+    # ----------------------------------------------------------------------
     def extract_results(self) -> TimeCoupledOPFResult:
-        """
-        Extrai os resultados da solução e retorna um objeto TimeCoupledOPFResult.
-        Inclui verificação de balanço de massa global.
-        """
+        """Extrai os resultados da solução e retorna um objeto TimeCoupledOPFResult."""
         if not self._solved or self.model is None:
             raise RuntimeError("Modelo não resolvido. Execute solve() primeiro.")
 
@@ -466,8 +583,6 @@ class TimeCoupledOPFModel:
         snapshots = []
         dias_nomes = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"]
 
-        balanco_errors = []
-
         for t in range(T):
             dia = t // self.n_horas
             hora = t % self.n_horas
@@ -475,101 +590,63 @@ class TimeCoupledOPFModel:
             dia_semana_nome = dias_nomes[dia_semana-1]
 
             try:
-                # PLOAD (já em MW)
-                PLOAD_vals = self.PLOAD[t, :].tolist()
-                demanda_total = sum(PLOAD_vals)
-
+                # Demanda (pu → MW)
+                PLOAD_vals = (self.PLOAD[t, :] ).tolist()
                 # Geração térmica
-                PGER_vals = [self.model.get_value(self.PGER[t, g]) for g in range(s.NGER_CONV)]
-                ger_term_total = sum(PGER_vals)
+                PGER_vals = [self.model.get_value(self.PGER[t, g])  for g in range(s.NGER_CONV)]
 
                 # Eólica
                 if s.NGER_EOL > 0:
-                    PGWIND_disponivel = self.PGWIND_AVAIL[t, :].tolist()
-                    PGWIND_vals = [self.model.get_value(self.PGWIND[t, w]) for w in range(s.NGER_EOL)]
-                    CURTAILMENT_vals = [self.model.get_value(self.CURTAILMENT[t, w]) for w in range(s.NGER_EOL)]
-                    ger_eol_total = sum(PGWIND_vals)
+                    PGWIND_disponivel = (self.PGWIND_AVAIL[t, :] ).tolist()
+                    PGWIND_vals = [self.model.get_value(self.PGWIND[t, w])  for w in range(s.NGER_EOL)]
+                    CURTAILMENT_vals = [self.model.get_value(self.CURTAILMENT[t, w])  for w in range(s.NGER_EOL)]
                 else:
                     PGWIND_disponivel = PGWIND_vals = CURTAILMENT_vals = []
-                    ger_eol_total = 0.0
 
                 # Déficit
-                DEFICIT_vals = [self.model.get_value(self.DEFICIT[t, b]) for b in range(s.NBAR)]
-                deficit_total = sum(DEFICIT_vals)
+                DEFICIT_vals = [self.model.get_value(self.DEFICIT[t, b])  for b in range(s.NBAR)]
 
                 # Baterias
                 SOC_init = [0.0] * s.NBAR
                 SOC_atual = [0.0] * s.NBAR
                 BESS_operation = [0.0] * s.NBAR
-                carga_total = 0.0
-                descarga_total = 0.0
-
                 if self._battery_list:
-                    for b in self._battery_list:
+                    for i, b in enumerate(self._battery_list):
                         # SOC inicial (antes do período)
                         if t == 0:
-                            idx = self._battery_index.get(b, None)
-                            if idx is not None and idx < len(self._soc_inicial_list):
-                                soc_init_val = self._soc_inicial_list[idx]
-                            else:
-                                soc_init_val = 0.0
+                            soc_init_val = self._soc_inicial_list[i]
                         else:
-                            soc_init_val = self.model.get_value(self.SOC[t-1, b]) \
-                                if (t-1, b) in self.SOC else 0.0
-                        SOC_init[b] = soc_init_val
+                            soc_init_val = self.model.get_value(self.SOC[t-1, b])
+                        SOC_init[b] = soc_init_val   # MWh
 
                         # SOC atual (após o período)
-                        if (t, b) in self.SOC:
-                            SOC_atual[b] = self.model.get_value(self.SOC[t, b])
+                        soc_atual_val = self.model.get_value(self.SOC[t, b])
+                        SOC_atual[b] = soc_atual_val 
 
-                        # Operação
-                        charge = self.model.get_value(self.CHARGE[t, b]) \
-                            if (t, b) in self.CHARGE else 0.0
-                        discharge = self.model.get_value(self.DISCHARGE[t, b]) \
-                            if (t, b) in self.DISCHARGE else 0.0
-                        BESS_operation[b] = charge - discharge
-                        carga_total += charge
-                        descarga_total += discharge
+                        # Operação líquida (descarga - carga)
+                        charge = self.model.get_value(self.CHARGE[t, b]) 
+                        discharge = self.model.get_value(self.DISCHARGE[t, b]) 
+                        BESS_operation[b] = discharge - charge
 
-                # Tensão, ângulo, fluxo
-                V = [self.model.get_value(self.V[t, b]) for b in range(s.NBAR)]
-                ANG = [self.model.get_value(self.ANG[t, b]) for b in range(s.NBAR)]
-                FLUXO_LIN = [self.model.get_value(self.FLUXO_LIN[t, e]) for e in range(s.NLIN)]
+                # Tensão (fixa em 1.0 pu)
+                V = [1.0] * s.NBAR
+                ANG = [self.model.get_value(self.ANG[t, b]) for b in range(s.NBAR)]  # rad
+                FLUXO_LIN = [self.model.get_value(self.FLUXO_LIN[t, e])  for e in range(s.NLIN)]
 
-                # Custos (apenas déficit)
-                CUSTO = [DEFICIT_vals[b] * getattr(s, 'CPG_DEFICIT', 1000.0) for b in range(s.NBAR)]
+                # Custos (déficit em MW, custo em $/MW = custo_pu / SB)
+                custo_deficit_pu = getattr(s, 'CPG_DEFICIT', 1000.0)
+                # Para obter $, usamos DEFICIT_pu * custo_deficit_pu
+                DEFICIT_pu = [self.model.get_value(self.DEFICIT[t, b]) for b in range(s.NBAR)]
+                CUSTO = [d_pu * custo_deficit_pu for d_pu in DEFICIT_pu]
 
-                # CMO (preço marginal) – opcional
-                CMO = 0.0
-                # for (tt, bb, constr) in self.balance_constraints:
-                #     if tt == t and bb == s.slack_idx:
-                #         CMO = self.model.get_dual(constr)
-                #         break
+                # CMO (não disponível diretamente)
+                CMO = [0.0]
 
                 # Perdas
                 if self.considerar_perdas and self._perdas_calculadas is not None:
-                    PERDAS_BARRA = self._perdas_calculadas[t, :].tolist()
-                    perdas_total = sum(PERDAS_BARRA)
+                    PERDAS_BARRA = (self._perdas_calculadas[t, :] ).tolist()
                 else:
                     PERDAS_BARRA = [0.0] * s.NBAR
-                    perdas_total = 0.0
-
-                # TODO: VERIFICAR PQ NAO ESTA BATENDO
-                # # Verificação de balanço global
-                # lhs_global = ger_term_total + ger_eol_total + deficit_total + descarga_total - carga_total
-                # rhs_global = demanda_total + perdas_total
-                # diff_global = lhs_global - rhs_global
-                # if abs(diff_global) > 0.05:  # tolerância de 50 kW (ajustável)
-                #     print(f"\n⚠️  Hora {t}: balanço global não fecha")
-                #     print(f"   LHS (gerado) = {lhs_global:.6f}  |  RHS (consumido) = {rhs_global:.6f}  |  diff = {diff_global:.6e}")
-                #     print(f"   PGER     = {ger_term_total:.6f}")
-                #     print(f"   PGWIND   = {ger_eol_total:.6f}")
-                #     print(f"   DEFICIT  = {deficit_total:.6f}")
-                #     print(f"   DESCARGA = {descarga_total:.6f}")
-                #     print(f"   CARGA    = {carga_total:.6f}")
-                #     print(f"   DEMANDA  = {demanda_total:.6f}")
-                #     print(f"   PERDAS   = {perdas_total:.6f}")
-                #     balanco_errors.append((t, diff_global, lhs_global, rhs_global))
 
                 snapshots.append(TimeCoupledOPFSnapshotResult(
                     dia=dia,
@@ -589,7 +666,7 @@ class TimeCoupledOPFModel:
                     ANG=ANG,
                     FLUXO_LIN=FLUXO_LIN,
                     CUSTO=CUSTO,
-                    CMO=[CMO],
+                    CMO=CMO,
                     PERDAS_BARRA=PERDAS_BARRA,
                     dia_semana_nome=dia_semana_nome
                 ))
@@ -606,29 +683,23 @@ class TimeCoupledOPFModel:
                     dia_semana_nome=dia_semana_nome
                 ))
 
-        # if balanco_errors:
-        #     print("\n⚠️  Atenção: discrepâncias no balanço de massa detectadas (global):")
-        #     for t, diff, lhs, rhs in balanco_errors:
-        #         print(f"   Hora {t}: GERADO = {lhs:.3f}, CONSUMIDO = {rhs:.3f}, diferença = {diff:.3e}")
-        # else:
-        #     print("\n✅ Balanço de massa verificado – todas as horas fecham dentro da tolerância.")
-
         sucesso_global = all(s.sucesso for s in snapshots)
         return TimeCoupledOPFResult(
             snapshots=snapshots,
             sucesso_global=sucesso_global,
             mensagem_global="OK" if sucesso_global else "Falhas na extração de alguns snapshots"
         )
-    
-    # -------------------------------------------------------------------------
+
+    # ----------------------------------------------------------------------
     # Método de conveniência
-    # -------------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     def solve_multiday(self,
                        solver_name: str = 'highs',
                        fator_carga: Optional[np.ndarray] = None,
                        fator_vento: Optional[np.ndarray] = None,
                        soc_inicial: Union[float, List[float]] = 0.5,
-                       soc_final: Union[float, List[float]] = 0.5,
+                       soc_final: Optional[Union[float, List[float]]] = None,
+                       cost_function: Optional[Callable] = None,
                        cen_id: Optional[str] = None,
                        tol: float = 1e-4,
                        max_iter: int = 50,
@@ -637,6 +708,7 @@ class TimeCoupledOPFModel:
         Executa todo o processo: construir, resolver (com perdas) e opcionalmente salvar no banco.
         """
         self.build(fator_carga, fator_vento, soc_inicial, soc_final)
+        self.build_objective(cost_function)
 
         if self.considerar_perdas:
             raw = self.solve_iterative(solver_name, tol=tol, max_iter=max_iter, write_lp=write_lp)
@@ -660,13 +732,12 @@ class TimeCoupledOPFModel:
 
 
 # =============================================================================
-# Exemplo de uso (main) – idêntico ao da versão Pyomo, apenas trocando a classe
+# Exemplo de uso (main)
 # =============================================================================
 if __name__ == "__main__":
     import sys
     import os
     import numpy as np
-    import pandas as pd
     from datetime import datetime
     import secrets
 
@@ -677,7 +748,7 @@ if __name__ == "__main__":
     from UTILS.EvaluateFactors import EvaluateFactors
 
     print("=" * 70)
-    print("SIMULAÇÃO COM MODELO INTEGRADO NO TEMPO (DC OPF) - PyOptInterface")
+    print("SIMULAÇÃO COM MODELO INTEGRADO NO TEMPO (DC OPF)")
     print("=" * 70)
 
     # -------------------------------------------------------------------------
@@ -716,13 +787,13 @@ if __name__ == "__main__":
     # 4. Configurar banco de dados
     # -------------------------------------------------------------------------
     print("\n3. Configurando banco de dados...")
-    db_handler = OPF_DBHandler('DATA/output/resultados_PL_acoplado_pyopt.db')
+    db_handler = OPF_DBHandler('DATA/output/resultados_PL_acoplado.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S')
     print(f"   ✓ Cenário ID: {cen_id}")
 
     # -------------------------------------------------------------------------
-    # 5. Criar modelo (PyOptInterface)
+    # 5. Criar modelo
     # -------------------------------------------------------------------------
     modelo = TimeCoupledOPFModel(
         sistema=sistema,
@@ -747,6 +818,22 @@ if __name__ == "__main__":
     )
     fatores_carga, fatores_vento = avaliador.gerar_tudo()
 
+    # -------------------------------------------------------------------------
+    # 7. Exemplo de função objetivo customizada (opcional)
+    # -------------------------------------------------------------------------
+    def meu_objetivo(model):
+        """Exemplo: minimizar apenas curtailment e déficit."""
+        expr = 0.0
+        for t in range(model.horizon_time):
+            for w in range(model.sistema.NGER_EOL):
+                expr += 1000 * model.CURTAILMENT[t, w]
+            for b in range(model.sistema.NBAR):
+                expr += 5000 * model.DEFICIT[t, b]
+        return expr
+
+    usar_objetivo_padrao = True
+    cost_func = None if usar_objetivo_padrao else meu_objetivo
+
     print("\n4. Resolvendo modelo integrado com perdas iterativas...")
     raw = modelo.solve_multiday(
         solver_name='highs',
@@ -754,6 +841,7 @@ if __name__ == "__main__":
         fator_vento=fatores_vento,
         soc_inicial=SOC_inicial,
         soc_final=SOC_final,
+        cost_function=cost_func,
         cen_id=cen_id,
         tol=1e-4,
         max_iter=10,
@@ -764,7 +852,7 @@ if __name__ == "__main__":
     print(f"\nStatus da solução: {status}")
 
     # -------------------------------------------------------------------------
-    # 7. Extrair e exibir resumo
+    # 8. Extrair e exibir resumo
     # -------------------------------------------------------------------------
     resultados = modelo.extract_results()
     print(f"\nSucesso global: {resultados.sucesso_global}")
@@ -775,7 +863,7 @@ if __name__ == "__main__":
 
     if modelo._battery_list:
         prim_batt = modelo._battery_list[0]
-        soc_final_val = modelo.model.get_value(modelo.SOC[T-1, prim_batt])
+        soc_final_val = modelo.model.get_value(modelo.SOC[T-1, prim_batt]) * sistema.SB
         print(f"SOC final da bateria {prim_batt}: {soc_final_val:.3f} MWh")
 
     print("\n" + "=" * 70)
