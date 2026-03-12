@@ -2,7 +2,7 @@
 """
 RNA_especialistas_por_horario_v4.py
 
-Para cada hora (4,5,6) treina uma MLPRegressor multi‑saída que recebe como entrada
+Para cada hora treina uma MLPRegressor multi‑saída que recebe como entrada
 as features de TODAS as barras (concatenadas) e prevê os targets de TODAS as barras
 simultaneamente.
 
@@ -61,7 +61,7 @@ def load_data(db_path):
                CURTAILMENT_total_result,
                BESS_operation_result
         FROM DBAR_results
-        WHERE hora_simulacao IN (4,5,6)
+        WHERE hora_simulacao IN (16,17,18)
     '''
 
     df = pd.read_sql_query(query, conn)
@@ -115,7 +115,7 @@ def prepare_X_y(df_wide, remove_constants=True):
     As demais features (PLOAD_medido, PLOAD_estimado, PGER_CONV_total_result) permanecem apenas em X.
     """
     feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario', 
-                        'PGER_CONV_total_result', 'PLOAD_medido', 'PLOAD_estimado']
+                        'PGER_CONV_total_result', 'PLOAD_medido']
     
     # Todas as colunas que são features (inclusive as que podem ser removidas depois)
     all_feature_cols = [col for col in df_wide.columns 
@@ -131,7 +131,6 @@ def prepare_X_y(df_wide, remove_constants=True):
         # Remover colunas de features constantes
         constant_features = X.columns[X.std() == 0].tolist()
         if constant_features:
-            print(f"   Removendo features constantes: {constant_features}")
             X = X.drop(columns=constant_features)
     
     # Agora, construir y com base nas features restantes
@@ -301,10 +300,10 @@ def main():
     # 4. Preparar diretório de saída
     os.makedirs(MODELS_DIR, exist_ok=True)
 
-    # 5. Treinar modelos para horas 4,5,6
-    print("\n[4] Treinando modelos para horas 4,5,6...")
+    # 5. Treinar modelos para horas 16, 17 , 18
+    print("\n[4] Treinando modelos para horas 16, 17 , 18...")
     resultados = []
-    horas_interesse = [4, 5, 6]
+    horas_interesse = [16, 17, 18]
     
     for hora in horas_interesse:
         print(f"\n--- Processando hora {hora:02d} ---")

@@ -29,11 +29,11 @@ DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
 MODELS_DIR = "DATA/output/modelos_especialistas_v4"
 
 # Horas para as quais existem modelos treinados
-HORAS_INTERESSE = [4, 5, 6]
+HORAS_INTERESSE = [16, 17, 18]
 
 # Tolerâncias para considerar acerto (mesmas do treinamento)
 TOLERANCE_REL = 0.05
-TOLERANCE_ABS = 0.1
+TOLERANCE_ABS = 0.05
 
 # Parâmetros da geração de cenários
 N_ITERACOES = 100
