@@ -78,7 +78,7 @@ def suppress_output():
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
-# ========== Funções de preparação de dados (copiadas do script de treino) ==========
+# ========== Funções de preparação de dados ==========
 
 def load_data(db_path, cen_id=None):
     """Carrega os dados do banco SQLite. Se cen_id for fornecido, filtra por ele."""
@@ -252,7 +252,7 @@ def testar_cenario(cen_id, models, contadores):
 
 def main():
     print("=" * 70)
-    print("TESTE DE RNAs ESPECIALISTAS COM GERAÇÃO PRÉVIA DE CENÁRIOS")
+    print("TESTE DE RNAs ESPECIALISTAS ")
     print("=" * 70)
 
     # -------------------------------------------------------------------------
@@ -290,7 +290,7 @@ def main():
         return 1
 
     # -------------------------------------------------------------------------
-    # 2. Preparar sistema e modelo de otimização (para geração)
+    # 2. Preparar sistema e modelo de otimização
     # -------------------------------------------------------------------------
     print("\n[2] Carregando sistema e criando modelo de otimização...")
     if not os.path.exists(JSON_PATH):
@@ -413,14 +413,14 @@ def main():
     print("=" * 70)
 
     # Opcional: salvar resultados em arquivo
-    resumo = {
-        'data': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'cenarios': len(cenarios_gerados),
-        'tempo_geracao': tempo_geracao,
-        'tempo_teste': tempo_teste,
-        'acertos_por_hora': {h: contadores[h]['acertos'] for h in contadores},
-        'total_por_hora': {h: contadores[h]['total'] for h in contadores}
-    }
+    # resumo = {
+    #     'data': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    #     'cenarios': len(cenarios_gerados),
+    #     'tempo_geracao': tempo_geracao,
+    #     'tempo_teste': tempo_teste,
+    #     'acertos_por_hora': {h: contadores[h]['acertos'] for h in contadores},
+    #     'total_por_hora': {h: contadores[h]['total'] for h in contadores}
+    # }
     # Salvar em JSON, se desejado
     # with open('resultado_teste.json', 'w') as f:
     #     json.dump(resumo, f, indent=2)

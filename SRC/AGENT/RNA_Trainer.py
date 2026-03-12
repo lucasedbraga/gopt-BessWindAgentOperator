@@ -107,57 +107,46 @@ def create_wide_format(df, barras_com_medicao):
 def prepare_X_y(df_wide, remove_constants=True):
     """
     Separa features (X) e targets (y) a partir do DataFrame largo.
-    Remove linhas com NaN.
-    Se remove_constants=True, remove colunas de features constantes.
-    Em seguida, constrói y com base nas features restantes:
-        - Se existe BESS_init_cenario_BAR{id} em X, adiciona BESS_operation_result_BAR{id} em y.
-        - Se existe PGWIND_disponivel_cenario_BAR{id} em X, adiciona CURTAILMENT_total_result_BAR{id} em y.
-    As demais features (PLOAD_medido, PLOAD_estimado, PGER_CONV_total_result) permanecem apenas em X.
+    X contém: BESS_init_cenario_BAR{b}, PGWIND_disponivel_cenario_BAR{b},
+              PGER_CONV_total_result_BAR{b}, PLOAD_medido_BAR{b}
+    y contém: BESS_operation_result_BAR{b}, CURTAILMENT_total_result_BAR{b},
+              PLOAD_estimado_BAR{b}
+    Remove linhas com NaN nas features.
+    Se remove_constants=True, remove colunas de features constantes e targets constantes.
     """
+    # Lista de prefixos para features e targets
     feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario', 
                         'PGER_CONV_total_result', 'PLOAD_medido']
+    target_prefixes = ['BESS_operation_result', 'CURTAILMENT_total_result', 'PLOAD_estimado']
     
-    # Todas as colunas que são features (inclusive as que podem ser removidas depois)
-    all_feature_cols = [col for col in df_wide.columns 
-                        if any(col.startswith(prefix) for prefix in feature_prefixes)]
+    # Identificar todas as colunas que são features
+    feature_cols = [col for col in df_wide.columns 
+                    if any(col.startswith(p) for p in feature_prefixes)]
     
-    # Remover linhas com NaN nas features (targets ainda não foram separados)
-    df_clean = df_wide.dropna(subset=all_feature_cols)
+    # Remover linhas com NaN nas features
+    df_clean = df_wide.dropna(subset=feature_cols)
     
-    # Inicialmente X com todas as features
-    X = df_clean[all_feature_cols]
+    # Separar X
+    X = df_clean[feature_cols].copy()
     
+    # Separar y com todas as colunas de target que existem
+    target_cols = [col for col in df_clean.columns 
+                   if any(col.startswith(p) for p in target_prefixes)]
+    y = df_clean[target_cols].copy()
+    
+    # Remover constantes se solicitado
     if remove_constants:
-        # Remover colunas de features constantes
-        constant_features = X.columns[X.std() == 0].tolist()
-        if constant_features:
-            X = X.drop(columns=constant_features)
-    
-    # Agora, construir y com base nas features restantes
-    target_cols = []
-    for col in X.columns:
-        # Extrair o número da barra e o tipo da feature
-        if '_BAR' not in col:
-            continue
-        base, bar = col.rsplit('_BAR', 1)
-        # base pode ser algo como 'BESS_init_cenario' ou 'PGWIND_disponivel_cenario', etc.
-        if base.startswith('BESS_init_cenario'):
-            target_name = f'BESS_operation_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-        elif base.startswith('PGWIND_disponivel_cenario'):
-            target_name = f'CURTAILMENT_total_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-    
-    # Remover duplicatas (caso haja)
-    target_cols = list(dict.fromkeys(target_cols))
-    
-    # Construir y
-    if target_cols:
-        y = df_clean[target_cols]
-    else:
-        y = pd.DataFrame(index=df_clean.index)  # vazio, mas com mesmo índice
+        # Em X
+        constant_X = X.columns[X.std() == 0].tolist()
+        if constant_X:
+            X = X.drop(columns=constant_X)
+            print(f"   Removidas features constantes: {constant_X}")
+        
+        # Em y
+        constant_y = y.columns[y.std() == 0].tolist()
+        if constant_y:
+            y = y.drop(columns=constant_y)
+            print(f"   Removidos targets constantes: {constant_y}")
     
     print(f"   Features shape: {X.shape}, Targets shape: {y.shape}")
     return X, y
