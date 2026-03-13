@@ -62,6 +62,7 @@ def load_data(db_path):
                BESS_operation_result
         FROM DBAR_results
         WHERE hora_simulacao IN (16,17,18)
+        LIMIT 100000000
     '''
 
     df = pd.read_sql_query(query, conn)
@@ -188,21 +189,32 @@ def train_and_evaluate_for_hour(X, y, hour, models_dir):
         verbose=False
     )
 
-    pipeline = Pipeline(steps=[
-        ('scaler', StandardScaler()),
-        ('mlp', mlp)
-    ])
-
+    pipeline = Pipeline(steps=[('mlp', mlp)])
+    import json
     try:
         pipeline.fit(X_train, y_train)
     except Exception as e:
         print(f"   Erro no treinamento para hora {hour:02d}: {e}")
         return None
 
+        # Após o fit, salvar metadados
+    metadata = {
+        'feature_names': list(X.columns),
+        'target_names': list(y.columns)
+    }
+    hour_dir = os.path.join(models_dir, f"hora_{hour:02d}")
+    os.makedirs(hour_dir, exist_ok=True)
+    with open(os.path.join(hour_dir, 'metadata.json'), 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+    # Salvar o pipeline
+    model_path = os.path.join(hour_dir, 'pipeline.joblib')
+    joblib.dump(pipeline, model_path)
+
     # Previsões
     y_pred = pipeline.predict(X_test)
 
-    # Corrigir dimensionalidade quando há apenas um target
+    # Corrigir dimensionalidade
     if y_pred.ndim == 1:
         y_pred = y_pred.reshape(-1, 1)
 

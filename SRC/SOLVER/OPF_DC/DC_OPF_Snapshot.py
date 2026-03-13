@@ -116,12 +116,13 @@ class DCOPFSnapshot:
         self._process_battery_initial_soc(soc_baterias)
 
         # Criar variáveis e preencher os dicionários (t=0)
+        self._create_v_vars()
         self._create_thermal_vars()
         self._create_wind_vars()
         self._create_deficit_vars()
         self._create_angle_vars()
         self._create_flow_vars()
-        self._create_battery_vars()   # cria variáveis de bateria (CHARGE, DISCHARGE, SOC, BatteryOperation)
+        self._create_battery_vars()  
 
         # Adicionar restrições usando as classes externas
         self._add_external_constraints()
@@ -212,21 +213,32 @@ class DCOPFSnapshot:
             self.DEFICIT_dict[(0, b)] = var
         self.var_indices['deficit'] = {b: self.var_lists['deficit'][b] for b in range(self.n_bus)}
 
+    def _create_v_vars(self):
+        self.var_lists['v_pu'] = []
+        for b in range(self.n_bus):
+            var = self.model.add_variable(
+                lb=0.95,
+                ub=1.05,
+                name=f"v_pu_{b}"
+            )
+            self.var_lists['v_pu'].append(var)
+        self.var_indices['v_pu'] = {b: self.var_lists['v_pu'][b] for b in range(self.n_bus)}
+
     def _create_angle_vars(self):
-        self.var_lists['angle'] = []
+        self.var_lists['ang_pu'] = []
         for b in range(self.n_bus):
             var = self.model.add_variable(
                 lb=-np.pi,
                 ub=np.pi,
-                name=f"angle_{b}"
+                name=f"ang_pu_{b}"
             )
-            self.var_lists['angle'].append(var)
+            self.var_lists['ang_pu'].append(var)
             self.ANG_dict[(0, b)] = var
         self.model.add_linear_constraint(
-            self.var_lists['angle'][self.slack_bus] == 0.0,
+            self.var_lists['ang_pu'][self.slack_bus] == 0.0,
             name="fix_slack_angle"
         )
-        self.var_indices['angle'] = {b: self.var_lists['angle'][b] for b in range(self.n_bus)}
+        self.var_indices['ang_pu'] = {b: self.var_lists['ang_pu'][b] for b in range(self.n_bus)}
 
     def _create_flow_vars(self):
         self.var_lists['flow'] = []
@@ -406,7 +418,7 @@ class DCOPFSnapshot:
             print("Primeira iteração: solução não ótima.")
             return raw
 
-        ang_prev = np.array([self.model.get_value(self.var_lists['angle'][b]) for b in range(self.n_bus)])
+        ang_prev = np.array([self.model.get_value(self.var_lists['ang_pu'][b]) for b in range(self.n_bus)])
 
         for it in range(1, max_iter):
             perdas = self.calculate_losses_from_flow()
@@ -444,7 +456,7 @@ class DCOPFSnapshot:
                 print(f"Iteração {it+1}: solução não ótima.")
                 break
 
-            ang_curr = np.array([self.model.get_value(self.var_lists['angle'][b]) for b in range(self.n_bus)])
+            ang_curr = np.array([self.model.get_value(self.var_lists['ang_pu'][b]) for b in range(self.n_bus)])
             diff = np.max(np.abs(ang_curr - ang_prev))
             print(f"Iteração {it+1}: diff = {diff:.6f}")
             if diff < tol:
@@ -510,8 +522,8 @@ class DCOPFSnapshot:
                     discharge = self.model.get_value(self.DISCHARGE_dict[(0, bus)])
                     BESS_operation[bus] = discharge - charge
 
-            V = [1.0] * self.n_bus
-            ANG = [self.model.get_value(self.var_lists['angle'][b]) for b in range(self.n_bus)]
+            V = [self.model.get_value(self.var_lists['v_pu'][b]) for b in range(self.n_bus)]
+            ANG = [self.model.get_value(self.var_lists['ang_pu'][b]) for b in range(self.n_bus)]
             FLUXO_LIN = [self.model.get_value(self.var_lists['flow'][e]) for e in range(self.n_line)]
 
             DEFICIT_pu = [self.model.get_value(self.var_lists['deficit'][b]) for b in range(self.n_bus)]
@@ -625,7 +637,7 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee118_BASE.json"
+    json_path = "DATA/input/ieee33_BASE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -642,7 +654,8 @@ if __name__ == "__main__":
     # 2. Configurar banco de dados
     # -------------------------------------------------------------------------
     print("\n2. Configurando banco de dados...")
-    db_handler = OPF_DBHandler('DATA/output/resultados_OPFDC_snapshot.db')
+    
+    db_handler = OPF_DBHandler('DATA/output/resultados_snapshot.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S') + "_snapshot"
     print(f"   ✓ Cenário ID: {cen_id}")
@@ -714,20 +727,20 @@ if __name__ == "__main__":
         resultado = modelo.extract_results(hora=hora_desejada, cen_id=cen_id)
 
         print(f"\n5. Resultados para Hora {hora_desejada}:")
-        print(f"   Demanda total: {sum(resultado.PLOAD):.2f} pu")
-        print(f"   Perdas: {sum(resultado.PERDAS_BARRA):.2f} pu")
-        print(f"   Geração térmica total: {sum(resultado.PGER):.2f} pu")
+        print(f"   Demanda total: {sum(resultado.PLOAD):.3f} pu")
+        print(f"   Perdas: {sum(resultado.PERDAS_BARRA):.3f} pu")
+        print(f"   Geração térmica total: {sum(resultado.PGER):.3f} pu")
         if sistema.NGER_EOL > 0:
-            print(f"   Geração eólica total: {sum(resultado.PGWIND):.2f} pu")
-            print(f"   Curtailment total: {sum(resultado.CURTAILMENT):.2f} pu")
-        print(f"   Déficit total: {sum(resultado.DEFICIT):.2f} pu")
+            print(f"   Geração eólica total: {sum(resultado.PGWIND):.3f} pu")
+            print(f"   Curtailment total: {sum(resultado.CURTAILMENT):.3f} pu")
+        print(f"   Déficit total: {sum(resultado.DEFICIT):.3f} pu")
 
         if sistema.BARRAS_COM_BATERIA:
             for b in sistema.BARRAS_COM_BATERIA:
                 print(f"   Bateria barra {b}:")
-                print(f"      operação = {resultado.BESS_operation[b]:.2f} pu")
-                print(f"      SOC inicial = {resultado.SOC_init[b]:.2f} pu")
-                print(f"      SOC final   = {resultado.SOC_atual[b]:.2f} pu")
+                print(f"      operação = {resultado.BESS_operation[b]:.3f} pu")
+                print(f"      SOC inicial = {resultado.SOC_init[b]:.3f} pu")
+                print(f"      SOC final   = {resultado.SOC_atual[b]:.3f} pu")
 
         print(f"   CMO (barra slack): {resultado.CMO[0]:.2f} $/MWh")
 

@@ -106,7 +106,7 @@ class TimeCoupledOPFModel:
         T = self.horizon_time
 
         # ------------------------------------------------------------------
-        # Processar fatores de carga e vento -> arrays 2D (T, n_bus) e (T, n_wind) em pu
+        # Processar fatores de carga e vento 
         # ------------------------------------------------------------------
         self._process_fatores(fator_carga, fator_vento)
 
@@ -276,8 +276,7 @@ class TimeCoupledOPFModel:
                     ub=1.05,
                     name=f"V_{t}_{b}"
                 )
-                self.model.add_linear_constraint(self.V[t, b] == 1.0, name=f"fix_V_{t}_{b}")
-
+            
     def _create_angle_vars(self):
         s = self.sistema
         for t in range(self.horizon_time):
@@ -299,6 +298,7 @@ class TimeCoupledOPFModel:
                     ub=s.FLIM[e],     # pu
                     name=f"FLUXO_LIN_{t}_{e}"
                 )
+    
     def _create_battery_vars(self):
         """Cria variáveis de bateria para todos os períodos e preenche os dicionários."""
         if not self._battery_list:
@@ -629,7 +629,7 @@ class TimeCoupledOPFModel:
                         BESS_operation[b] = discharge - charge
 
                 # Tensão (fixa em 1.0 pu)
-                V = [1.0] * s.NBAR
+                V = [self.model.get_value(self.V[t, b]) for b in range(s.NBAR)] 
                 ANG = [self.model.get_value(self.ANG[t, b]) for b in range(s.NBAR)]  # rad
                 FLUXO_LIN = [self.model.get_value(self.FLUXO_LIN[t, e])  for e in range(s.NLIN)]
 
@@ -755,7 +755,7 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/3barras_BASE.json"
+    json_path = "DATA/input/ieee33_BASE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -772,7 +772,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 2. Parâmetros da simulação
     # -------------------------------------------------------------------------
-    n_dias = 1
+    n_dias = 7
     n_horas = 24
     T = n_dias * n_horas
     print(f"\n2. Simulando {n_dias} dias x {n_horas} horas = {T} períodos.")
@@ -844,7 +844,7 @@ if __name__ == "__main__":
         cost_function=cost_func,
         cen_id=cen_id,
         tol=1e-4,
-        max_iter=10,
+        max_iter=5,
         write_lp=True
     )
 
