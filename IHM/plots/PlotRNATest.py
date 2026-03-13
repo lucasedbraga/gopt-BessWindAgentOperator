@@ -5,13 +5,11 @@ compare_rna_optimizer.py
 Gera um cenário (ou utiliza um existente) e compara, para as horas 4, 5 e 6,
 os valores reais (otimizador) com as predições da RNA.
 Produz gráficos de barras comparativos para BESS_operation e CURTAILMENT.
-Agora também imprime uma tabela detalhada com diferenças.
-Se nenhum cenário for especificado, utiliza o último cenário presente no banco.
 """
 
 import numpy as np
-import json
 import pandas as pd
+import json
 import os
 import sqlite3
 import joblib
@@ -35,7 +33,7 @@ HORAS_INTERESSE = [16, 17, 18]
 # Barras com medição (para create_wide_format)
 BARRAS_COM_MEDICAO = [3]
 
-# Parâmetros da geração de cenários (usados apenas se não houver nenhum cenário no banco)
+# Parâmetros da geração de cenários (usados apenas se não for fornecido um cenário existente)
 N_ITERACOES = 1          # Vamos gerar apenas UM cenário
 N_DIAS = 7
 N_HORAS = 24
@@ -46,16 +44,18 @@ SOLVER_NAME = 'highs'
 TOL = 1e-4
 MAX_ITER = 5
 WRITE_LP = False
+SILENCIAR_SOLVER = True   # Suprime saída do solver durante a geração
 
 # Controle de plotagem
 SAVE_FIG = True
-OUTPUT_DIR = "../DATA/output/graficos_comparacao"
+OUTPUT_DIR = "DATA/output/graficos_comparacao"
 
 # Se você já tem um cenário no banco e quer usá-lo, defina o ID aqui.
-# Caso contrário, deixe como None para buscar o último automaticamente.
+# Caso contrário, deixe como None para gerar um novo.
 CENARIO_EXISTENTE = None   # Exemplo: "20250310143000_00000"
 # ========================================================
 
+# Ajusta o path para encontrar os módulos do projeto
 # Ajusta o path para encontrar os módulos do projeto
 current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 src_path = current_path.replace("IHM", "SRC")
@@ -66,6 +66,20 @@ from DB.DBhandler_OPF import OPF_DBHandler
 from UTILS.EvaluateFactors import EvaluateFactors
 from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 
+# ========== Context manager para suprimir saída ==========
+@contextmanager
+def suppress_output():
+    """Suprime toda a saída para stdout e stderr."""
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = devnull
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
 # ========== Funções de preparação de dados (copiadas do script de treino) ==========
 
@@ -122,44 +136,28 @@ def create_wide_format(df, barras_com_medicao):
 def prepare_X_y(df_wide, remove_constants=True):
     """
     Separa features (X) e targets (y) a partir do DataFrame largo.
-    Retorna X e y como DataFrames.
+    X contém: BESS_init_cenario_BAR*, PGWIND_disponivel_cenario_BAR*,
+              PGER_CONV_total_result_BAR*, PLOAD_medido_BAR*
+    y contém: BESS_operation_result_BAR*, CURTAILMENT_total_result_BAR*, PLOAD_estimado_BAR*
+    Remove linhas com NaN nas features.
     """
-    feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario', 
-                        'PGER_CONV_total_result', 'PLOAD_medido', 'PLOAD_estimado']
-    
-    all_feature_cols = [col for col in df_wide.columns 
-                        if any(col.startswith(prefix) for prefix in feature_prefixes)]
-    
-    df_clean = df_wide.dropna(subset=all_feature_cols)
-    X = df_clean[all_feature_cols]
-    
+    feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario',
+                        'PGER_CONV_total_result', 'PLOAD_medido']
+    target_prefixes = ['BESS_operation_result', 'CURTAILMENT_total_result', 'PLOAD_estimado']
+
+    feature_cols = [col for col in df_wide.columns if any(col.startswith(p) for p in feature_prefixes)]
+    df_clean = df_wide.dropna(subset=feature_cols)
+    X = df_clean[feature_cols].copy()
+    target_cols = [col for col in df_clean.columns if any(col.startswith(p) for p in target_prefixes)]
+    y = df_clean[target_cols].copy()
+
     if remove_constants:
-        constant_features = X.columns[X.std() == 0].tolist()
-        if constant_features:
-            X = X.drop(columns=constant_features)
-    
-    # Construir targets com base nas features remanescentes
-    target_cols = []
-    for col in X.columns:
-        if '_BAR' not in col:
-            continue
-        base, bar = col.rsplit('_BAR', 1)
-        if base.startswith('BESS_init_cenario'):
-            target_name = f'BESS_operation_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-        elif base.startswith('PGWIND_disponivel_cenario'):
-            target_name = f'CURTAILMENT_total_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-    
-    target_cols = list(dict.fromkeys(target_cols))
-    
-    if target_cols:
-        y = df_clean[target_cols]
-    else:
-        y = pd.DataFrame(index=df_clean.index)
-    
+        constant_X = X.columns[X.std() == 0].tolist()
+        if constant_X:
+            X = X.drop(columns=constant_X)
+        constant_y = y.columns[y.std() == 0].tolist()
+        if constant_y:
+            y = y.drop(columns=constant_y)
     return X, y
 
 def get_target_names_from_features(feature_names):
@@ -178,13 +176,9 @@ def get_target_names_from_features(feature_names):
             target_names.append(f'CURTAILMENT_total_result_BAR{bar}')
     return list(dict.fromkeys(target_names))
 
-# ========== Função para carregar modelos (agora usando metadata.json) ==========
+# ========== Função para carregar modelos ==========
 def carregar_modelos():
-    """
-    Carrega os pipelines das horas de interesse a partir dos arquivos salvos,
-    utilizando o metadata.json para obter os nomes exatos das features e targets.
-    Retorna um dicionário com modelos.
-    """
+    """Carrega os pipelines das horas de interesse e retorna um dicionário."""
     models = {}
     for hora in HORAS_INTERESSE:
         model_path = os.path.join(MODELS_DIR, f"hora_{hora:02d}", "pipeline.joblib")
@@ -193,17 +187,33 @@ def carregar_modelos():
         if not os.path.exists(model_path):
             print(f"   Modelo para hora {hora} não encontrado em {model_path}. Ignorando.")
             continue
-        if not os.path.exists(metadata_path):
-            print(f"   Metadata para hora {hora} não encontrado. Ignorando.")
-            continue
-
+        
         pipeline = joblib.load(model_path)
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-
-        feature_names = metadata['feature_names']
-        target_names = metadata['target_names']
-
+        
+        # Tenta carregar metadata.json (forma mais confiável)
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            feature_names = metadata['feature_names']
+            target_names = metadata['target_names']
+        else:
+            # Fallback: obter feature_names do scaler (se disponível)
+            if 'scaler' in pipeline.named_steps:
+                scaler = pipeline.named_steps['scaler']
+                if hasattr(scaler, 'feature_names_in_'):
+                    feature_names = list(scaler.feature_names_in_)
+                else:
+                    print(f"   Aviso: scaler não possui feature_names_in_ para hora {hora}. Modelo ignorado.")
+                    continue
+            else:
+                print(f"   Aviso: pipeline não possui step 'scaler' para hora {hora}. Modelo ignorado.")
+                continue
+            
+            target_names = get_target_names_from_features(feature_names)
+            if not target_names:
+                print(f"   Aviso: não foi possível derivar targets para hora {hora}. Modelo ignorado.")
+                continue
+        
         models[hora] = {
             'pipeline': pipeline,
             'feature_names': feature_names,
@@ -211,23 +221,6 @@ def carregar_modelos():
         }
         print(f"   Hora {hora:02d} carregada: {len(feature_names)} features, {len(target_names)} targets")
     return models
-
-# ========== Função para obter o último cenário do banco ==========
-def get_ultimo_cenario(db_path):
-    """
-    Consulta o banco e retorna o cen_id mais recente (considerando a ordenação
-    decrescente do campo cen_id, que segue o padrão YYYYMMDDHHMMSS_xxxxx).
-    Se não houver nenhum cenário, retorna None.
-    """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT cen_id FROM DBAR_results ORDER BY cen_id DESC LIMIT 1")
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return row[0]
-    else:
-        return None
 
 # ========== Função para gerar um novo cenário ==========
 def gerar_cenario_unico():
@@ -269,16 +262,16 @@ def gerar_cenario_unico():
         print(f"   Gerando cenário {cen_id}...")
         
         _ = modelo.solve_multiday(
-                solver_name=SOLVER_NAME,
-                fator_carga=fatores_carga,
-                fator_vento=fatores_vento,
-                soc_inicial=SOC_INICIAL_FRACAO,
-                soc_final=SOC_FINAL_FRACAO,
-                cen_id=cen_id,
-                tol=TOL,
-                max_iter=MAX_ITER,
-                write_lp=WRITE_LP
-            )
+            solver_name=SOLVER_NAME,
+            fator_carga=fatores_carga,
+            fator_vento=fatores_vento,
+            soc_inicial=SOC_INICIAL_FRACAO,
+            soc_final=SOC_FINAL_FRACAO,
+            cen_id=cen_id,
+            tol=TOL,
+            max_iter=MAX_ITER,
+            write_lp=WRITE_LP
+        )
         
         print(f"   Cenário {cen_id} gerado com sucesso.")
         return cen_id
@@ -364,121 +357,71 @@ def extrair_comparacao(cen_id, models):
     
     return resultados
 
-# ========== Função para imprimir detalhes das diferenças ==========
-def print_detalhes_comparacao(resultados):
-    """
-    Exibe uma tabela para cada hora com os valores reais, previstos e diferenças.
-    """
-    for hora in sorted(resultados.keys()):
-        data = resultados[hora]
-        y_true = data['y_true'].iloc[0]  # Series
-        y_pred = data['y_pred'][0]        # array 1D
-        target_names = data['target_names']
-        
-        print(f"\n{'='*60}")
-        print(f"DETALHES PARA HORA {hora:02d}")
-        print(f"{'='*60}")
-        
-        # Criar DataFrame para exibição
-        df_detalhes = pd.DataFrame({
-            'Target': target_names,
-            'Real': y_true.values,
-            'Previsto': y_pred,
-            'Diferença (abs)': np.abs(y_true.values - y_pred),
-            'Diferença (%)': np.where(
-                np.abs(y_true.values) > 1e-6,
-                np.abs(y_true.values - y_pred) / np.abs(y_true.values) * 100,
-                np.nan
-            )
-        })
-        # Formatação
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.width', 120)
-        pd.set_option('display.float_format', '{:.6f}'.format)
-        print(df_detalhes.to_string(index=False))
-        print()
-
 # ========== Funções de plotagem ==========
 def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
     """
-    Plota gráficos de barras comparando real vs predito para BESS_operation e CURTAILMENT.
+    Plota um gráfico de barras comparando real vs predito para TODOS os targets da hora.
     """
     if hora not in resultados:
         return
     
     data = resultados[hora]
-    y_true = data['y_true']
-    y_pred = data['y_pred']
+    y_true = data['y_true'].iloc[0]  # Series
+    y_pred = data['y_pred'][0]        # array 1D
     target_names = data['target_names']
     
-    # Separar targets por tipo
-    bess_targets = [name for name in target_names if 'BESS_operation' in name]
-    curt_targets = [name for name in target_names if 'CURTAILMENT' in name]
+    # Criar rótulos mais curtos para o eixo x
+    rotulos = []
+    for nome in target_names:
+        if 'BESS_operation' in nome:
+            rotulos.append(nome.replace('BESS_operation_result_BAR', 'BESS_'))
+        elif 'CURTAILMENT' in nome:
+            rotulos.append(nome.replace('CURTAILMENT_total_result_BAR', 'CURT_'))
+        elif 'PLOAD_estimado' in nome:
+            rotulos.append(nome.replace('PLOAD_estimado_BAR', 'PLOAD_'))
+        else:
+            rotulos.append(nome)
     
-    # Extrair valores para BESS
-    if len(bess_targets) > 0:
-        # Pegar a primeira linha (única amostra)
-        bess_true = y_true[bess_targets].iloc[0].values  # Shape: (n_barras,)
-        bess_pred = y_pred[0, [target_names.index(t) for t in bess_targets]]  # Shape: (n_barras,)
-        
-        barras_bess = [t.replace('BESS_operation_result_BAR', '') for t in bess_targets]
-        
-        fig, ax = plt.subplots(figsize=(max(6, len(barras_bess) * 0.8), 5))
-        x = np.arange(len(barras_bess))
-        width = 0.35
-        
-        ax.bar(x - width/2, bess_true, width, label='Real', color='steelblue')
-        ax.bar(x + width/2, bess_pred, width, label='Previsto', color='orange')
-        
-        ax.set_xlabel('Barra')
-        ax.set_ylabel('Potência (MW)')
-        ax.set_title(f'Hora {hora:02d} - Operação da Bateria (BESS)')
-        ax.set_xticks(x)
-        ax.set_xticklabels(barras_bess)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        if save_fig:
-            os.makedirs(output_dir, exist_ok=True)
-            fname = os.path.join(output_dir, f'bess_comparison_hora_{hora:02d}.png')
-            plt.savefig(fname, dpi=150, bbox_inches='tight')
-            print(f"   Gráfico salvo: {fname}")
-        plt.show()
+    x = np.arange(len(target_names))  # posições das barras
+    width = 0.35
     
-    # Extrair valores para CURTAILMENT
-    if len(curt_targets) > 0:
-        # Pegar a primeira linha (única amostra)
-        curt_true = y_true[curt_targets].iloc[0].values  # Shape: (n_barras,)
-        curt_pred = y_pred[0, [target_names.index(t) for t in curt_targets]]  # Shape: (n_barras,)
-        
-        barras_curt = [t.replace('CURTAILMENT_total_result_BAR', '') for t in curt_targets]
-        
-        fig, ax = plt.subplots(figsize=(max(6, len(barras_curt) * 0.8), 5))
-        x = np.arange(len(barras_curt))
-        width = 0.35
-        
-        ax.bar(x - width/2, curt_true, width, label='Real', color='steelblue')
-        ax.bar(x + width/2, curt_pred, width, label='Previsto', color='orange')
-        
-        ax.set_xlabel('Barra')
-        ax.set_ylabel('Potência (MW)')
-        ax.set_title(f'Hora {hora:02d} - Corte Eólico (CURTAILMENT)')
-        ax.set_xticks(x)
-        ax.set_xticklabels(barras_curt)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        if save_fig:
-            os.makedirs(output_dir, exist_ok=True)
-            fname = os.path.join(output_dir, f'curtailment_comparison_hora_{hora:02d}.png')
-            plt.savefig(fname, dpi=150, bbox_inches='tight')
-            print(f"   Gráfico salvo: {fname}")
-        plt.show()
+    fig, ax = plt.subplots(figsize=(max(10, len(target_names) * 0.5), 6))
+    bars1 = ax.bar(x - width/2, y_true.values, width, label='Real (otimizador)', color='steelblue')
+    bars2 = ax.bar(x + width/2, y_pred, width, label='Previsto (RNA)', color='orange')
+    
+    ax.set_xlabel('Variável')
+    ax.set_ylabel('Valor (MW)')
+    ax.set_title(f'Hora {hora:02d} - Comparação: Real vs RNA (todos os targets)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(rotulos, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Opcional: adicionar valores sobre as barras (descomente se desejar)
+    # for bar in bars1:
+    #     height = bar.get_height()
+    #     if height != 0:
+    #         ax.annotate(f'{height:.3f}', xy=(bar.get_x() + bar.get_width()/2, height),
+    #                     xytext=(0,3), textcoords="offset points", ha='center', va='bottom', fontsize=8)
+    # for bar in bars2:
+    #     height = bar.get_height()
+    #     if height != 0:
+    #         ax.annotate(f'{height:.3f}', xy=(bar.get_x() + bar.get_width()/2, height),
+    #                     xytext=(0,3), textcoords="offset points", ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout()
+    
+    if save_fig:
+        os.makedirs(output_dir, exist_ok=True)
+        fname = os.path.join(output_dir, f'comparacao_completa_hora_{hora:02d}.png')
+        plt.savefig(fname, dpi=150, bbox_inches='tight')
+        print(f"   Gráfico salvo: {fname}")
+    plt.show()
 
 # ========== Função principal ==========
 def main():
     print("=" * 70)
-    print("COMPARAÇÃO RNA vs OTIMIZADOR - HORAS 4, 5 e 6")
+    print("COMPARAÇÃO RNA vs OTIMIZADOR - HORAS 16, 17 e 18")
     print("=" * 70)
 
     # 1. Carregar modelos
@@ -491,18 +434,12 @@ def main():
     # 2. Definir cenário a ser usado
     if CENARIO_EXISTENTE:
         cen_id = CENARIO_EXISTENTE
-        print(f"\n[2] Usando cenário existente (fornecido): {cen_id}")
+        print(f"\n[2] Usando cenário existente: {cen_id}")
     else:
-        print("\n[2] Buscando último cenário no banco de dados...")
-        cen_id = get_ultimo_cenario(DB_PATH)
+        cen_id = gerar_cenario_unico()
         if cen_id is None:
-            print("Nenhum cenário encontrado no banco. Gerando um novo...")
-            cen_id = gerar_cenario_unico()
-            if cen_id is None:
-                print("Falha na geração do cenário. Abortando.")
-                return 1
-        else:
-            print(f"   Último cenário encontrado: {cen_id}")
+            print("Falha na geração do cenário. Abortando.")
+            return 1
 
     # 3. Extrair comparação
     resultados = extrair_comparacao(cen_id, models)
@@ -510,12 +447,8 @@ def main():
         print("Nenhum dado de comparação obtido. Abortando.")
         return 1
 
-    # 4. Imprimir detalhes das diferenças
-    print("\n[3] Detalhes das predições:")
-    print_detalhes_comparacao(resultados)
-
-    # 5. Plotar gráficos
-    print("\n[4] Gerando gráficos comparativos...")
+    # 4. Plotar gráficos
+    print("\n[3] Gerando gráficos comparativos...")
     for hora in HORAS_INTERESSE:
         plot_comparacao_barras(resultados, hora, OUTPUT_DIR, SAVE_FIG)
 

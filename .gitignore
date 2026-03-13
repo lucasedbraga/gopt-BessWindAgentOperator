@@ -207,8 +207,13 @@ marimo/_lsp/
 __marimo__/
 
 # Output data and results
+.token/*
+
 DATA/output/*
 IHM/PowerBalance.ipynb
 IHM/LinesOperation.ipynb
 IHM/PowerBalance.ipynb
-.token/*
+IHM/RNATest.ipynb
+IHM/Snapshot.ipynb
+DATA/output_B6L8/*
+
