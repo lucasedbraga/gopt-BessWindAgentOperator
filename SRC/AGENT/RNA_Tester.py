@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-RNA_Tester.py
+compare_rna_optimizer.py
 
-Combina a geração de cenários (DATAGenerator_TimeCoupled.py) com a avaliação
-dos modelos treinados (RNA_especialistas_por_horario_v4.py). 
-Primeiro gera N cenários (rodando o otimizador), depois testa a RNA em todos
-os cenários gerados e apresenta um resultado geral.
-
-Uso: python RNA_Tester.py
+Gera um cenário (ou utiliza um existente) e compara, para as horas 4, 5 e 6,
+os valores reais (otimizador) com as predições da RNA.
+Produz gráficos de barras comparativos para BESS_operation e CURTAILMENT.
+Agora também imprime uma tabela detalhada com diferenças.
+Se nenhum cenário for especificado, utiliza o último cenário presente no banco.
 """
 
 import numpy as np
+import json
 import pandas as pd
 import os
 import sqlite3
@@ -21,23 +21,23 @@ import traceback
 from datetime import datetime
 import secrets
 from contextlib import contextmanager
+import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "DATA/input/B6L8_BASE.json"
-DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
-MODELS_DIR = "DATA/output/modelos_especialistas_v4"
+JSON_PATH = "../DATA/input/ieee33_BASE.json"
+DB_PATH = "../DATA/output/RNA_resultados_PL_acoplado.db"
+MODELS_DIR = "../DATA/output/modelos_especialistas_v4"
 
-# Horas para as quais existem modelos treinados
-HORAS_INTERESSE = [4, 5, 6]
+# Horas para as quais existem modelos treinados e que queremos comparar
+HORAS_INTERESSE = [16, 17, 18]
 
-# Tolerâncias para considerar acerto (mesmas do treinamento)
-TOLERANCE_REL = 0.05
-TOLERANCE_ABS = 0.1
+# Barras com medição (para create_wide_format)
+BARRAS_COM_MEDICAO = [3]
 
-# Parâmetros da geração de cenários
-N_ITERACOES = 100
-N_DIAS = 30
+# Parâmetros da geração de cenários (usados apenas se não houver nenhum cenário no banco)
+N_ITERACOES = 1          # Vamos gerar apenas UM cenário
+N_DIAS = 7
 N_HORAS = 24
 SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5
@@ -47,36 +47,25 @@ TOL = 1e-4
 MAX_ITER = 5
 WRITE_LP = False
 
-# Barras com medição (para create_wide_format)
-BARRAS_COM_MEDICAO = [3]
+# Controle de plotagem
+SAVE_FIG = True
+OUTPUT_DIR = "../DATA/output/graficos_comparacao"
 
-# Controle de saída do solver (silenciar ou não)
-SILENCIAR_SOLVER = True   # Se True, suprime toda a saída do solver durante a geração
-
+# Se você já tem um cenário no banco e quer usá-lo, defina o ID aqui.
+# Caso contrário, deixe como None para buscar o último automaticamente.
+CENARIO_EXISTENTE = None   # Exemplo: "20250310143000_00000"
 # ========================================================
 
 # Ajusta o path para encontrar os módulos do projeto
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src_path = current_path.replace("IHM", "SRC")
+sys.path.append(src_path)
 
 from UTILS.SystemLoader import SistemaLoader
 from DB.DBhandler_OPF import OPF_DBHandler
 from UTILS.EvaluateFactors import EvaluateFactors
 from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 
-# ========== Context manager para suprimir saída ==========
-@contextmanager
-def suppress_output():
-    """Suprime toda a saída para stdout e stderr."""
-    with open(os.devnull, 'w') as devnull:
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        sys.stdout = devnull
-        sys.stderr = devnull
-        try:
-            yield
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
 
 # ========== Funções de preparação de dados (copiadas do script de treino) ==========
 
@@ -173,15 +162,6 @@ def prepare_X_y(df_wide, remove_constants=True):
     
     return X, y
 
-def calculate_correctness(y_true, y_pred, rel_tol, abs_tol):
-    """
-    Retorna array booleano indicando se a previsão está correta para TODOS os targets.
-    """
-    errors = np.abs(y_true.values - y_pred)
-    tolerance = np.maximum(rel_tol * np.abs(y_true.values), abs_tol)
-    correct_all = (errors <= tolerance).all(axis=1)
-    return correct_all
-
 def get_target_names_from_features(feature_names):
     """
     Deriva os nomes dos targets a partir dos nomes das features, seguindo a mesma
@@ -198,107 +178,67 @@ def get_target_names_from_features(feature_names):
             target_names.append(f'CURTAILMENT_total_result_BAR{bar}')
     return list(dict.fromkeys(target_names))
 
-# ========== Função de teste de um cenário ==========
-
-def testar_cenario(cen_id, models, contadores):
+# ========== Função para carregar modelos (agora usando metadata.json) ==========
+def carregar_modelos():
     """
-    Para um cenário já salvo no banco, testa todas as horas de interesse usando os modelos.
-    Atualiza os contadores in-place.
+    Carrega os pipelines das horas de interesse a partir dos arquivos salvos,
+    utilizando o metadata.json para obter os nomes exatos das features e targets.
+    Retorna um dicionário com modelos.
     """
-    df = load_data(DB_PATH, cen_id=cen_id)
-    if df.empty:
-        print(f"   Aviso: Nenhum dado encontrado para cenário {cen_id}")
-        return
-
-    df_wide = create_wide_format(df, BARRAS_COM_MEDICAO)
-    
-    for hora in HORAS_INTERESSE:
-        model_data = models.get(hora)
-        if model_data is None:
-            continue
-        pipeline = model_data['pipeline']
-        feature_names = model_data['feature_names']
-        target_names = model_data['target_names']
-        
-        df_hora = df_wide[df_wide['hora_simulacao'] == hora]
-        if df_hora.empty:
-            continue
-        
-        X_raw, y_raw = prepare_X_y(df_hora, remove_constants=False)
-        
-        try:
-            X = X_raw[feature_names]
-        except KeyError as e:
-            print(f"   Erro: Feature {e} não encontrada em X_raw para hora {hora}")
-            continue
-        
-        try:
-            y_true = y_raw[target_names]
-        except KeyError as e:
-            print(f"   Erro: Target {e} não encontrado em y_raw para hora {hora}")
-            continue
-        
-        y_pred = pipeline.predict(X)
-        correct = calculate_correctness(y_true, y_pred, TOLERANCE_REL, TOLERANCE_ABS)
-        n_correct = np.sum(correct)
-        n_total = len(correct)
-        
-        contadores[hora]['total'] += n_total
-        contadores[hora]['acertos'] += n_correct
-        
-        print(f"      Hora {hora:02d}: {n_correct}/{n_total} corretos ({n_correct/n_total*100:.1f}%)")
-
-# ========== Função principal ==========
-
-def main():
-    print("=" * 70)
-    print("TESTE DE RNAs ESPECIALISTAS COM GERAÇÃO PRÉVIA DE CENÁRIOS")
-    print("=" * 70)
-
-    # -------------------------------------------------------------------------
-    # 1. Carregar modelos treinados
-    # -------------------------------------------------------------------------
-    print("\n[1] Carregando modelos...")
     models = {}
     for hora in HORAS_INTERESSE:
         model_path = os.path.join(MODELS_DIR, f"hora_{hora:02d}", "pipeline.joblib")
+        metadata_path = os.path.join(MODELS_DIR, f"hora_{hora:02d}", "metadata.json")
+        
         if not os.path.exists(model_path):
             print(f"   Modelo para hora {hora} não encontrado em {model_path}. Ignorando.")
             continue
+        if not os.path.exists(metadata_path):
+            print(f"   Metadata para hora {hora} não encontrado. Ignorando.")
+            continue
+
         pipeline = joblib.load(model_path)
-        scaler = pipeline.named_steps['scaler']
-        if hasattr(scaler, 'feature_names_in_'):
-            feature_names = list(scaler.feature_names_in_)
-        else:
-            print(f"   Aviso: scaler não possui feature_names_in_ para hora {hora}. Modelo ignorado.")
-            continue
-        
-        target_names = get_target_names_from_features(feature_names)
-        if not target_names:
-            print(f"   Aviso: não foi possível derivar targets para hora {hora}. Modelo ignorado.")
-            continue
-        
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        feature_names = metadata['feature_names']
+        target_names = metadata['target_names']
+
         models[hora] = {
             'pipeline': pipeline,
             'feature_names': feature_names,
             'target_names': target_names
         }
         print(f"   Hora {hora:02d} carregada: {len(feature_names)} features, {len(target_names)} targets")
+    return models
 
-    if not models:
-        print("Nenhum modelo válido carregado. Abortando.")
-        return 1
+# ========== Função para obter o último cenário do banco ==========
+def get_ultimo_cenario(db_path):
+    """
+    Consulta o banco e retorna o cen_id mais recente (considerando a ordenação
+    decrescente do campo cen_id, que segue o padrão YYYYMMDDHHMMSS_xxxxx).
+    Se não houver nenhum cenário, retorna None.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT cen_id FROM DBAR_results ORDER BY cen_id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row[0]
+    else:
+        return None
 
-    # -------------------------------------------------------------------------
-    # 2. Preparar sistema e modelo de otimização (para geração)
-    # -------------------------------------------------------------------------
-    print("\n[2] Carregando sistema e criando modelo de otimização...")
+# ========== Função para gerar um novo cenário ==========
+def gerar_cenario_unico():
+    """Gera um único cenário usando o otimizador e retorna o cen_id."""
+    print("\n[GERAÇÃO] Gerando um novo cenário...")
+    
     if not os.path.exists(JSON_PATH):
         print(f"ERRO: Arquivo do sistema não encontrado: {JSON_PATH}")
-        return 1
-    sistema = SistemaLoader(JSON_PATH)
-    print(f"   Sistema: {JSON_PATH}")
+        return None
     
+    sistema = SistemaLoader(JSON_PATH)
     db_handler = OPF_DBHandler(DB_PATH)
     db_handler.create_tables()
     
@@ -310,121 +250,278 @@ def main():
         considerar_perdas=CONSIDERAR_PERDAS,
         dia_inicial=0
     )
-    print("   Modelo criado.")
-
-    # -------------------------------------------------------------------------
-    # 3. Gerar todos os cenários primeiro
-    # -------------------------------------------------------------------------
-    print(f"\n[3] Gerando {N_ITERACOES} cenários...")
-    cenarios_gerados = []
-    inicio_geracao = time.time()
-
-    for i in range(N_ITERACOES):
-        try:
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            cen_id = f"{timestamp}_{i:05d}"
-
-            seed = secrets.randbits(32)
-            avaliador = EvaluateFactors(
-                sistema=sistema,
-                n_dias=N_DIAS,
-                n_horas=N_HORAS,
-                carga_incerteza=0.2,
-                vento_variacao=0.1,
-                seed=seed
+    
+    try:
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        cen_id = f"{timestamp}_00000"
+        
+        seed = secrets.randbits(32)
+        avaliador = EvaluateFactors(
+            sistema=sistema,
+            n_dias=N_DIAS,
+            n_horas=N_HORAS,
+            carga_incerteza=0.2,
+            vento_variacao=0.1,
+            seed=seed
+        )
+        fatores_carga, fatores_vento = avaliador.gerar_tudo()
+        
+        print(f"   Gerando cenário {cen_id}...")
+        
+        _ = modelo.solve_multiday(
+                solver_name=SOLVER_NAME,
+                fator_carga=fatores_carga,
+                fator_vento=fatores_vento,
+                soc_inicial=SOC_INICIAL_FRACAO,
+                soc_final=SOC_FINAL_FRACAO,
+                cen_id=cen_id,
+                tol=TOL,
+                max_iter=MAX_ITER,
+                write_lp=WRITE_LP
             )
-            fatores_carga, fatores_vento = avaliador.gerar_tudo()
+        
+        print(f"   Cenário {cen_id} gerado com sucesso.")
+        return cen_id
+    
+    except Exception as e:
+        print(f"   [!] Erro na geração: {e}")
+        traceback.print_exc()
+        return None
 
-            print(f"\n   [{i+1:2d}/{N_ITERACOES}] Gerando cenário {cen_id}...")
-            
-            if SILENCIAR_SOLVER:
-                with suppress_output():
-                    _ = modelo.solve_multiday(
-                        solver_name=SOLVER_NAME,
-                        fator_carga=fatores_carga,
-                        fator_vento=fatores_vento,
-                        soc_inicial=SOC_INICIAL_FRACAO,
-                        soc_final=SOC_FINAL_FRACAO,
-                        cen_id=cen_id,
-                        tol=TOL,
-                        max_iter=MAX_ITER,
-                        write_lp=WRITE_LP
-                    )
-            else:
-                _ = modelo.solve_multiday(
-                    solver_name=SOLVER_NAME,
-                    fator_carga=fatores_carga,
-                    fator_vento=fatores_vento,
-                    soc_inicial=SOC_INICIAL_FRACAO,
-                    soc_final=SOC_FINAL_FRACAO,
-                    cen_id=cen_id,
-                    tol=TOL,
-                    max_iter=MAX_ITER,
-                    write_lp=WRITE_LP
-                )
-
-            cenarios_gerados.append(cen_id)
-            print(f"   Cenário {cen_id} gerado com sucesso.")
-
-        except Exception as e:
-            print(f"   [!] Erro na iteração {i}: {e}")
-            traceback.print_exc()
+# ========== Função para extrair dados de comparação ==========
+def extrair_comparacao(cen_id, models):
+    """
+    Para um dado cen_id e os modelos carregados, retorna um dicionário com:
+        hora -> {
+            'y_true': DataFrame com os valores reais (targets) - UMA ÚNICA LINHA,
+            'y_pred': np.array com as predições - UMA ÚNICA LINHA,
+            'target_names': lista dos nomes dos targets
+        }
+    """
+    print(f"\n[COMPARAÇÃO] Carregando dados do cenário {cen_id}...")
+    df = load_data(DB_PATH, cen_id=cen_id)
+    if df.empty:
+        print(f"   Nenhum dado encontrado para cenário {cen_id}")
+        return {}
+    
+    df_wide = create_wide_format(df, BARRAS_COM_MEDICAO)
+    resultados = {}
+    
+    for hora in HORAS_INTERESSE:
+        if hora not in models:
             continue
+        
+        model_data = models[hora]
+        pipeline = model_data['pipeline']
+        feature_names = model_data['feature_names']
+        target_names = model_data['target_names']
+        
+        # Filtra APENAS a hora específica
+        df_hora = df_wide[df_wide['hora_simulacao'] == hora]
+        if df_hora.empty:
+            print(f"   Hora {hora:02d}: sem dados neste cenário.")
+            continue
+        
+        # Seleciona UMA LINHA ALEATÓRIA
+        if len(df_hora) > 1:
+            idx_aleatorio = np.random.randint(0, len(df_hora))
+            df_hora = df_hora.iloc[[idx_aleatorio]]
+            print(f"   Hora {hora:02d}: selecionada linha aleatória {idx_aleatorio} de {len(df_hora)} disponíveis")
+        else:
+            print(f"   Hora {hora:02d}: apenas 1 linha disponível")
+        
+        X_raw, y_raw = prepare_X_y(df_hora, remove_constants=False)
+        
+        # Garantir que temos todas as features necessárias
+        try:
+            X = X_raw[feature_names]
+        except KeyError as e:
+            print(f"   Erro: Feature {e} não encontrada em X_raw para hora {hora}")
+            continue
+        
+        # Garantir que temos todos os targets necessários
+        try:
+            y_true = y_raw[target_names]
+        except KeyError as e:
+            print(f"   Erro: Target {e} não encontrado em y_raw para hora {hora}")
+            continue
+        
+        # Predição - reshape para 2D se necessário
+        y_pred = pipeline.predict(X)
+        
+        # Garantir que y_pred seja 2D (1, n_targets)
+        if y_pred.ndim == 1:
+            y_pred = y_pred.reshape(1, -1)
+        
+        resultados[hora] = {
+            'y_true': y_true,
+            'y_pred': y_pred,
+            'target_names': target_names
+        }
+        
+        print(f"   Hora {hora:02d}: 1 amostra processada.")
+        print(f"   Shapes - y_true: {y_true.shape}, y_pred: {y_pred.shape}")
+    
+    return resultados
 
-    tempo_geracao = time.time() - inicio_geracao
-    print(f"\nGeração concluída em {tempo_geracao:.2f} segundos. Total de cenários gerados: {len(cenarios_gerados)}")
+# ========== Função para imprimir detalhes das diferenças ==========
+def print_detalhes_comparacao(resultados):
+    """
+    Exibe uma tabela para cada hora com os valores reais, previstos e diferenças.
+    """
+    for hora in sorted(resultados.keys()):
+        data = resultados[hora]
+        y_true = data['y_true'].iloc[0]  # Series
+        y_pred = data['y_pred'][0]        # array 1D
+        target_names = data['target_names']
+        
+        print(f"\n{'='*60}")
+        print(f"DETALHES PARA HORA {hora:02d}")
+        print(f"{'='*60}")
+        
+        # Criar DataFrame para exibição
+        df_detalhes = pd.DataFrame({
+            'Target': target_names,
+            'Real': y_true.values,
+            'Previsto': y_pred,
+            'Diferença (abs)': np.abs(y_true.values - y_pred),
+            'Diferença (%)': np.where(
+                np.abs(y_true.values) > 1e-6,
+                np.abs(y_true.values - y_pred) / np.abs(y_true.values) * 100,
+                np.nan
+            )
+        })
+        # Formatação
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.width', 120)
+        pd.set_option('display.float_format', '{:.6f}'.format)
+        print(df_detalhes.to_string(index=False))
+        print()
 
-    if not cenarios_gerados:
-        print("Nenhum cenário foi gerado. Abortando.")
+# ========== Funções de plotagem ==========
+def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
+    """
+    Plota gráficos de barras comparando real vs predito para BESS_operation e CURTAILMENT.
+    """
+    if hora not in resultados:
+        return
+    
+    data = resultados[hora]
+    y_true = data['y_true']
+    y_pred = data['y_pred']
+    target_names = data['target_names']
+    
+    # Separar targets por tipo
+    bess_targets = [name for name in target_names if 'BESS_operation' in name]
+    curt_targets = [name for name in target_names if 'CURTAILMENT' in name]
+    
+    # Extrair valores para BESS
+    if len(bess_targets) > 0:
+        # Pegar a primeira linha (única amostra)
+        bess_true = y_true[bess_targets].iloc[0].values  # Shape: (n_barras,)
+        bess_pred = y_pred[0, [target_names.index(t) for t in bess_targets]]  # Shape: (n_barras,)
+        
+        barras_bess = [t.replace('BESS_operation_result_BAR', '') for t in bess_targets]
+        
+        fig, ax = plt.subplots(figsize=(max(6, len(barras_bess) * 0.8), 5))
+        x = np.arange(len(barras_bess))
+        width = 0.35
+        
+        ax.bar(x - width/2, bess_true, width, label='Real', color='steelblue')
+        ax.bar(x + width/2, bess_pred, width, label='Previsto', color='orange')
+        
+        ax.set_xlabel('Barra')
+        ax.set_ylabel('Potência (MW)')
+        ax.set_title(f'Hora {hora:02d} - Operação da Bateria (BESS)')
+        ax.set_xticks(x)
+        ax.set_xticklabels(barras_bess)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        if save_fig:
+            os.makedirs(output_dir, exist_ok=True)
+            fname = os.path.join(output_dir, f'bess_comparison_hora_{hora:02d}.png')
+            plt.savefig(fname, dpi=150, bbox_inches='tight')
+            print(f"   Gráfico salvo: {fname}")
+        plt.show()
+    
+    # Extrair valores para CURTAILMENT
+    if len(curt_targets) > 0:
+        # Pegar a primeira linha (única amostra)
+        curt_true = y_true[curt_targets].iloc[0].values  # Shape: (n_barras,)
+        curt_pred = y_pred[0, [target_names.index(t) for t in curt_targets]]  # Shape: (n_barras,)
+        
+        barras_curt = [t.replace('CURTAILMENT_total_result_BAR', '') for t in curt_targets]
+        
+        fig, ax = plt.subplots(figsize=(max(6, len(barras_curt) * 0.8), 5))
+        x = np.arange(len(barras_curt))
+        width = 0.35
+        
+        ax.bar(x - width/2, curt_true, width, label='Real', color='steelblue')
+        ax.bar(x + width/2, curt_pred, width, label='Previsto', color='orange')
+        
+        ax.set_xlabel('Barra')
+        ax.set_ylabel('Potência (MW)')
+        ax.set_title(f'Hora {hora:02d} - Corte Eólico (CURTAILMENT)')
+        ax.set_xticks(x)
+        ax.set_xticklabels(barras_curt)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        if save_fig:
+            os.makedirs(output_dir, exist_ok=True)
+            fname = os.path.join(output_dir, f'curtailment_comparison_hora_{hora:02d}.png')
+            plt.savefig(fname, dpi=150, bbox_inches='tight')
+            print(f"   Gráfico salvo: {fname}")
+        plt.show()
+
+# ========== Função principal ==========
+def main():
+    print("=" * 70)
+    print("COMPARAÇÃO RNA vs OTIMIZADOR - HORAS 4, 5 e 6")
+    print("=" * 70)
+
+    # 1. Carregar modelos
+    print("\n[1] Carregando modelos...")
+    models = carregar_modelos()
+    if not models:
+        print("Nenhum modelo válido carregado. Abortando.")
         return 1
 
-    # -------------------------------------------------------------------------
-    # 4. Inicializar contadores e testar todos os cenários gerados
-    # -------------------------------------------------------------------------
-    print("\n[4] Iniciando teste dos cenários com as RNAs...")
-    contadores = {hora: {'total': 0, 'acertos': 0} for hora in models.keys()}
-    inicio_teste = time.time()
-
-    for idx, cen_id in enumerate(cenarios_gerados, 1):
-        print(f"\n   Testando cenário {idx}/{len(cenarios_gerados)}: {cen_id}")
-        testar_cenario(cen_id, models, contadores)
-
-    tempo_teste = time.time() - inicio_teste
-
-    # -------------------------------------------------------------------------
-    # 5. Resultados finais
-    # -------------------------------------------------------------------------
-    print("\n" + "=" * 70)
-    print("RESULTADOS FINAIS")
-    print("=" * 70)
-    print(f"Total de cenários gerados e testados: {len(cenarios_gerados)}")
-    print(f"Tempo de geração: {tempo_geracao:.2f} s")
-    print(f"Tempo de teste: {tempo_teste:.2f} s")
-    print(f"Tempo total: {tempo_geracao + tempo_teste:.2f} s")
-    print("\n--- Acurácia por hora ---")
-    for hora in sorted(contadores.keys()):
-        tot = contadores[hora]['total']
-        acertos = contadores[hora]['acertos']
-        if tot > 0:
-            acc = acertos / tot * 100
-            print(f"Hora {hora:02d}: {acertos:4d}/{tot:4d} corretos ({acc:6.2f}%)")
+    # 2. Definir cenário a ser usado
+    if CENARIO_EXISTENTE:
+        cen_id = CENARIO_EXISTENTE
+        print(f"\n[2] Usando cenário existente (fornecido): {cen_id}")
+    else:
+        print("\n[2] Buscando último cenário no banco de dados...")
+        cen_id = get_ultimo_cenario(DB_PATH)
+        if cen_id is None:
+            print("Nenhum cenário encontrado no banco. Gerando um novo...")
+            cen_id = gerar_cenario_unico()
+            if cen_id is None:
+                print("Falha na geração do cenário. Abortando.")
+                return 1
         else:
-            print(f"Hora {hora:02d}: sem testes")
+            print(f"   Último cenário encontrado: {cen_id}")
+
+    # 3. Extrair comparação
+    resultados = extrair_comparacao(cen_id, models)
+    if not resultados:
+        print("Nenhum dado de comparação obtido. Abortando.")
+        return 1
+
+    # 4. Imprimir detalhes das diferenças
+    print("\n[3] Detalhes das predições:")
+    print_detalhes_comparacao(resultados)
+
+    # 5. Plotar gráficos
+    print("\n[4] Gerando gráficos comparativos...")
+    for hora in HORAS_INTERESSE:
+        plot_comparacao_barras(resultados, hora, OUTPUT_DIR, SAVE_FIG)
+
+    print("\n" + "=" * 70)
+    print("PROCESSO CONCLUÍDO")
     print("=" * 70)
-
-    # Opcional: salvar resultados em arquivo
-    resumo = {
-        'data': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'cenarios': len(cenarios_gerados),
-        'tempo_geracao': tempo_geracao,
-        'tempo_teste': tempo_teste,
-        'acertos_por_hora': {h: contadores[h]['acertos'] for h in contadores},
-        'total_por_hora': {h: contadores[h]['total'] for h in contadores}
-    }
-    # Salvar em JSON, se desejado
-    # with open('resultado_teste.json', 'w') as f:
-    #     json.dump(resumo, f, indent=2)
-
     return 0
 
 if __name__ == "__main__":

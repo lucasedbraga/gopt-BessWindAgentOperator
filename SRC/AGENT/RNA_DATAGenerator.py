@@ -28,26 +28,23 @@ from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 # ==============================================================================================
 
 # Configurações
-JSON_PATH = "DATA/input/B6L8_BASE.json"        # arquivo do sistema
+JSON_PATH = "DATA/input/ieee33_BASE.json"        # arquivo do sistema
 DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
 
-N_ITERACOES = 500         # número total de cenários
-N_DIAS = 30             # dias por simulação
+N_ITERACOES = 1000      # número total de cenários
+N_DIAS = 7             # dias por simulação
 N_HORAS = 24            # horas por dia
 
-# Parâmetros da bateria (frações da capacidade total)
-SOC_INICIAL_FRACAO = 0.5   # 50% da capacidade
-SOC_FINAL_FRACAO = 0.5     # 50% da capacidade (pode ser alterado no loop)
+# Parâmetros da bateria 
+SOC_INICIAL_FRACAO = 0.5   
+SOC_FINAL_FRACAO = 0.5     
 
 # Opções do modelo
 CONSIDERAR_PERDAS = True
-SOLVER_NAME = 'highs'       # alterado para highs (solver padrão do PyOptInterface)
+SOLVER_NAME = 'highs'      
 TOL = 1e-4
 MAX_ITER = 5
-WRITE_LP = False            # não escrever arquivos LP para cada cenário (evita excesso)
-
-# Para reprodutibilidade, comente a linha abaixo se quiser total aleatoriedade
-# np.random.seed(42)
+WRITE_LP = False           
 
 
 def main():
@@ -57,7 +54,7 @@ def main():
     print("=" * 70)
 
     # -------------------------------------------------------------------------
-    # 1. Carregar sistema (uma única vez)
+    # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n[1] Carregando sistema...")
     if not os.path.exists(JSON_PATH):
@@ -74,18 +71,18 @@ def main():
     # -------------------------------------------------------------------------
     print("\n[2] Conectando ao banco de dados...")
     db_handler = OPF_DBHandler(DB_PATH)
-    db_handler.create_tables()  # garante que as tabelas existem
+    db_handler.create_tables() 
     print(f"   Banco: {DB_PATH}")
 
     # -------------------------------------------------------------------------
-    # 3. Criar o modelo (reutilizável, pois os fatores serão alterados)
+    # 3. Criar o modelo
     # -------------------------------------------------------------------------
     print("\n[3] Criando modelo integrado...")
     modelo = TimeCoupledOPFModel(
         sistema=sistema,
         n_horas=N_HORAS,
         n_dias=N_DIAS,
-        db_handler=db_handler,          # se o modelo salvar automaticamente, ele usará este handler
+        db_handler=db_handler,         
         considerar_perdas=CONSIDERAR_PERDAS,
         dia_inicial=0
     )
@@ -106,7 +103,7 @@ def main():
             # -----------------------------------------------------------------
             # Gerar fatores de carga e vento para este cenário
             # -----------------------------------------------------------------
-            seed = secrets.randbits(32)  # semente variável
+            seed = secrets.randbits(32) 
             avaliador = EvaluateFactors(
                 sistema=sistema,
                 n_dias=N_DIAS,
@@ -117,7 +114,7 @@ def main():
             )
             fatores_carga, fatores_vento = avaliador.gerar_tudo()
 
-            # (Opcional) Variar SOC inicial/final aleatoriamente
+            #Variar SOC inicial/final aleatoriamente
             soc_inicial_frac = SOC_INICIAL_FRACAO  
             soc_final_frac = SOC_FINAL_FRACAO
 
