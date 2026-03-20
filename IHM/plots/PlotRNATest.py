@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "DATA/input/ieee14_BASE.json"
-DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
+JSON_PATH = "DATA/input/ieee14_BESS.json"
+DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
 MODELS_DIR = "DATA/output/modelos_especialistas_v4"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
@@ -41,7 +41,7 @@ N_DIAS = 7
 N_HORAS = 24
 SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5
-CONSIDERAR_PERDAS = True
+CONSIDERAR_PERDAS = False
 SOLVER_NAME = 'highs'
 TOL = 1e-4
 MAX_ITER = 5
@@ -388,12 +388,12 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
     width = 0.35
     
     fig, ax = plt.subplots(figsize=(max(10, len(target_names) * 0.5), 6))
-    bars1 = ax.bar(x - width/2, y_true.values, width, label='Real (otimizador)', color='steelblue')
+    bars1 = ax.bar(x - width/2, y_true.values, width, label='Otimizador (OPF)', color='steelblue')
     bars2 = ax.bar(x + width/2, y_pred, width, label='Previsto (RNA)', color='orange')
     
     ax.set_xlabel('Variável')
     ax.set_ylabel('Valor (MW)')
-    ax.set_title(f'Hora {hora:02d} - Comparação: Real vs RNA (todos os targets)')
+    ax.set_title(f'Hora {hora:02d} - Comparação: OPF vs RNA ')
     ax.set_xticks(x)
     ax.set_xticklabels(rotulos, rotation=45, ha='right')
     ax.legend()
@@ -423,7 +423,7 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
 # ========== Função principal ==========
 def main():
     print("=" * 70)
-    print("COMPARAÇÃO RNA vs OTIMIZADOR - HORAS 16, 17 e 18")
+    print("COMPARAÇÃO RNA vs OPF - HORAS 16, 17 e 18")
     print("=" * 70)
 
     # 1. Carregar modelos

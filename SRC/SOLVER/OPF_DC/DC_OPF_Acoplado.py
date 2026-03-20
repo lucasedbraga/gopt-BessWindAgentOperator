@@ -806,7 +806,7 @@ if __name__ == "__main__":
         n_horas=n_horas,
         n_dias=n_dias,
         db_handler=db_handler,
-        considerar_perdas=True,
+        considerar_perdas=False,
         dia_inicial=0
     )
 
@@ -818,8 +818,8 @@ if __name__ == "__main__":
         sistema=sistema,
         n_dias=n_dias,
         n_horas=n_horas,
-        carga_incerteza=0.0,
-        vento_variacao=0.0,
+        carga_incerteza=0.2,
+        vento_variacao=0.1,
         seed=seed
     )
     fatores_carga, fatores_vento = avaliador.gerar_tudo()

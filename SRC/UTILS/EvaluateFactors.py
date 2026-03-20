@@ -45,6 +45,7 @@ class EvaluateFactors:
         self.carga_incerteza = carga_incerteza
         
         vento_arquivo = "/home/lucasedbraga/repositorios/ufjf/mestrado_luedsbr/SRC/SOLVER/DB/getters/intermittent-renewables-production-france.csv"
+        vento_arquivo = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
         self.vento_arquivo = vento_arquivo
         self.vento_variacao = vento_variacao
         self.seed = seed
@@ -115,34 +116,14 @@ class EvaluateFactors:
         NGER_EOL = self.sistema.NGER_EOL
         
         # Amostrar T valores com reposição da base histórica
-        indices = np.array(
-            [ 2826,  4074,  2433,   723,  4188,   978,  1021, 22806,  5427,
-            6571, 18436, 16226,  6767, 27122,  8963,  1999,  8503,  6727,
-            22049,  2666,  2327, 14496,  3067, 22211, 16013, 10093, 22055,
-            27241, 18157,  8368, 13125,  3204, 12821, 27930, 15162, 21299,
-            6514, 15036,   740, 19070,  9838, 15207, 24972,  2153, 11123,
-            21239, 16292, 21669, 22641, 12433,  2381, 13743,   589,  4401,
-            26985, 15518, 29706,  3244, 14296, 10504,  8515,  5171, 23628,
-            6433,  8436, 13937,  4117,  1588,  3770,  3524, 23393, 15761,
-            4233, 23735, 14608,  9122, 11417,  4947, 22647,  3480,  6845,
-            22882,  1012, 28165,   275,   575,  9537,   344, 16033,   636,
-            18385, 25173,  3215,  9447,  4178, 26663,  8193,  8276,  5220,
-            24560, 12294, 21650,  9587,  8684, 14591, 18549, 12740,  1031,
-            7249,  5046, 17428, 10444, 14016,  9248, 22409, 17011,  3292,
-            11540, 14986, 26819,  2908,   804, 26758, 18060,   174, 16625,
-            2168, 11169, 24975,  1276, 17671, 11743, 20506, 26865, 10045,
-            9755, 17391, 12505, 28374, 20509, 18924, 26293, 20243, 27148,
-            19789, 18852, 16952, 23750, 14696, 27040, 16879, 13824, 12820,
-            27212, 19517,  6397, 18062, 28895, 10050, 27139,  6196, 15284,
-            13240, 12248, 16527, 25606,  1309, 15621])
-        #np.random.choice(len(self.vento_fatores_base), size=T, replace=True)
+        indices = np.random.choice(len(self.vento_fatores_base), size=T, replace=True)
         fatores_base = self.vento_fatores_base[indices]  # shape (T,)
         
         # Expandir para (T, NGER_EOL)
         fatores_base = np.tile(fatores_base.reshape(-1, 1), (1, NGER_EOL))
         
         # Aplicar variação individual
-        delta = 0#np.random.uniform(-self.vento_variacao/2, self.vento_variacao/2, size=(T, NGER_EOL))
+        delta = np.random.uniform(-self.vento_variacao/2, self.vento_variacao/2, size=(T, NGER_EOL))
         fatores = fatores_base * (1 + delta)
         
         # Garantir que não fiquem negativos

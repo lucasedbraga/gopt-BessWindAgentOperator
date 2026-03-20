@@ -30,7 +30,7 @@ import joblib
 from tqdm import tqdm
 
 # ==================== CONFIGURAÇÕES ====================
-DB_PATH = 'DATA/output/RNA_resultados_PL_acoplado.db'
+DB_PATH = 'DATA/output/RNA_DATA_PL_acoplado.db'
 MODELS_DIR = 'DATA/output/modelos_especialistas_v4'
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
@@ -39,8 +39,8 @@ MAX_ITER = 2000
 TOLERANCE_REL = 0.05                # 5% de erro relativo
 TOLERANCE_ABS = 0.1                 # tolerância absoluta para valores próximos de zero
 MIN_SAMPLES_PER_GROUP = 30          # número mínimo de amostras por hora
-#BARRAS_COM_MEDICAO = [3, 5, 8]            # lista de BAR_id que possuem medição real
-BARRAS_COM_MEDICAO = [3, 5, 8, 17]            # lista de BAR_id que possuem medição real
+BARRAS_COM_MEDICAO = [3, 5, 8]            # lista de BAR_id que possuem medição real
+#BARRAS_COM_MEDICAO = [3, 5, 8, 17]            # lista de BAR_id que possuem medição real
 REMOVE_CONSTANT_COLUMNS = True      # se True, remove colunas com valores constantes (ex.: tudo zero)
 # ========================================================
 

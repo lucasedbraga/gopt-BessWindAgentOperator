@@ -394,6 +394,7 @@ def main():
         # ------------------------------------------------------------------
         print("\n2. Carregando dados de vento...")
         filepath = r"/home/lucasedbraga/repositorios/ufjf/mestrado_luedsbr/SRC/SOLVER/DB/getters/intermittent-renewables-production-france.csv"
+        filepath = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
         if not os.path.exists(filepath):
             print(f"ERRO: Arquivo de vento não encontrado: {filepath}")
             return 1

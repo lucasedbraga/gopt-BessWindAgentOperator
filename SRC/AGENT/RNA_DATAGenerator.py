@@ -28,10 +28,10 @@ from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 # ==============================================================================================
 
 # Configurações
-JSON_PATH = "DATA/input/ieee14_BASE.json"        # arquivo do sistema
-DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
+JSON_PATH = "DATA/input/ieee14_BESS.json"        # arquivo do sistema
+DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
 
-N_ITERACOES = 500      # número total de cenários
+N_ITERACOES = 1000      # número total de cenários
 N_DIAS = 7             # dias por simulação
 N_HORAS = 24            # horas por dia
 
@@ -40,7 +40,7 @@ SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5     
 
 # Opções do modelo
-CONSIDERAR_PERDAS = True
+CONSIDERAR_PERDAS = False
 SOLVER_NAME = 'highs'      
 TOL = 1e-4
 MAX_ITER = 5
