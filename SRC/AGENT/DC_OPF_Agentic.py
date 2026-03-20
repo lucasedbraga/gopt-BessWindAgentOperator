@@ -373,7 +373,7 @@ def main():
         # 1. CARREGAR SISTEMA
         # ------------------------------------------------------------------
         print("\n1. Carregando dados do sistema...")
-        json_path = "DATA/input/3barras_BASE.json"
+        json_path = "DATA/input/ieee14_BASE.json"
         if not os.path.exists(json_path):
             print(f"ERRO: Arquivo não encontrado: {json_path}")
             return 1

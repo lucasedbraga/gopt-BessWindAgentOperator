@@ -24,13 +24,13 @@ class BatteryConstraints:
         sistema,
         T: int,
         battery_list: List[int],
-        battery_index: Optional[Dict[int, int]],
         CHARGE: Dict[Tuple[int, int], poi.Variable],
         DISCHARGE: Dict[Tuple[int, int], poi.Variable],
         SOC: Dict[Tuple[int, int], poi.Variable],
         BatteryOperation: Dict[Tuple[int, int], poi.Variable],
         soc_inicial_list: List[float],
-        soc_final_list: Optional[List[float]] = None
+        soc_final_list: Optional[List[float]] = None,
+        daily_reset_to_initial: bool = False
     ) -> None:
         """
         Adiciona variáveis e restrições de bateria ao modelo PyOptInterface.
@@ -112,10 +112,9 @@ class BatteryConstraints:
                     name=f"SOC_evolution_{t}_{b}"
                 )
 
-        # 2d. SOC final (opcional) – aplicado apenas ao último período
-        if soc_final_list is not None:
-            for i, b in enumerate(battery_list):
-                model.add_linear_constraint(
-                    SOC[T-1, b] == soc_final_list[i],
-                    name=f"SOC_final_{b}"
-                )
+        # 2d. SOC Final do ultimo dia
+        for i, b in enumerate(battery_list):
+            model.add_linear_constraint(
+                SOC[T-1, b] == soc_inicial_list[i],
+                name=f"SOC_final_{b}"
+            )

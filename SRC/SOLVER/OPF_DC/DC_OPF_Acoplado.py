@@ -374,13 +374,13 @@ class TimeCoupledOPFModel:
                 sistema=s,
                 T=T,
                 battery_list=self._battery_list,
-                battery_index=self._battery_index,
                 CHARGE=self.CHARGE,
                 DISCHARGE=self.DISCHARGE,
                 SOC=self.SOC,
                 BatteryOperation=self.BatteryOperation,
                 soc_inicial_list=self._soc_inicial_list,
-                soc_final_list=self._soc_final_list if self._soc_final_list else None
+                soc_final_list=self._soc_final_list if self._soc_final_list else None,
+                daily_reset_to_initial=True 
             )
 
         # 3. Geradores eólicos
@@ -487,7 +487,6 @@ class TimeCoupledOPFModel:
 
     def solve_iterative(self, solver_name: str = 'highs', tol: float = 1e-4,
                         max_iter: int = 50, write_lp: bool = True, **solver_args):
-        """Resolve o modelo com iterações de perdas (ponto fixo)."""
         if not self.considerar_perdas:
             return self.solve(solver_name, write_lp=write_lp, **solver_args)
 
@@ -499,19 +498,18 @@ class TimeCoupledOPFModel:
             print("Primeira iteração: solução não ótima.")
             return raw
 
-        ang_prev = np.array([[self.model.get_value(self.ANG[t, b])
-                               for b in range(self.sistema.NBAR)]
-                              for t in range(self.horizon_time)])
-
+        # Inicializar valores anteriores
+        perdas_prev = self._perdas_calculadas.copy()
         for it in range(1, max_iter):
-            perdas = self.calculate_losses()
-            self.update_losses(perdas)
+            # Calcular perdas com base na solução atual
+            perdas_atuais = self.calculate_losses()
+            self.update_losses(perdas_atuais)
 
             # Remover restrições de balanço antigas
             for _, _, constr in self.balance_constraints:
                 self.model.delete_constraint(constr)
 
-            # Recriar restrições de balanço com novas perdas
+            # Recriar restrições com as novas perdas
             s = self.sistema
             T = self.horizon_time
             wind_gen_to_bar = getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [0]*s.NGER_EOL))
@@ -530,25 +528,32 @@ class TimeCoupledOPFModel:
                 CHARGE=self.CHARGE if self._battery_list else None,
                 DISCHARGE=self.DISCHARGE if self._battery_list else None,
                 battery_list=self._battery_list,
-                PERDAS_BARRA=perdas,
+                PERDAS_BARRA=perdas_atuais,
                 considerar_perdas=self.considerar_perdas
             )
 
+            # Resolver novamente
             raw = self.solve(solver_name, write_lp=False, **solver_args)
             if not self._solved or self.model.get_model_attribute(
                     poi.ModelAttribute.TerminationStatus) != poi.TerminationStatusCode.OPTIMAL:
                 print(f"Iteração {it+1}: solução não ótima.")
                 break
 
-            ang_curr = np.array([[self.model.get_value(self.ANG[t, b])
-                                   for b in range(self.sistema.NBAR)]
-                                  for t in range(self.horizon_time)])
-            diff = np.max(np.abs(ang_curr - ang_prev))
-            print(f"Iteração {it+1}: diff = {diff:.6f}")
-            if diff < tol:
+            # Calcular diferenças
+            diff_perdas = np.max(np.abs(perdas_atuais - perdas_prev))
+
+            print('-'*70)
+            print(f"Iteração {it+1}: diff_perdas = {diff_perdas:.6f}")
+            print('-'*70)
+
+            # Critério de convergência
+            if diff_perdas < tol:
                 print(f"Convergência alcançada na iteração {it+1}.")
                 break
-            ang_prev = ang_curr.copy()
+
+            perdas_prev = perdas_atuais.copy()
+        else:
+            print("Número máximo de iterações atingido sem convergência.")
 
         return raw
 
@@ -617,7 +622,7 @@ class TimeCoupledOPFModel:
                             soc_init_val = self._soc_inicial_list[i]
                         else:
                             soc_init_val = self.model.get_value(self.SOC[t-1, b])
-                        SOC_init[b] = soc_init_val   # MWh
+                        SOC_init[b] = soc_init_val
 
                         # SOC atual (após o período)
                         soc_atual_val = self.model.get_value(self.SOC[t, b])
@@ -755,7 +760,8 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee33_BASE.json"
+    json_path = "DATA/input/ieee118_BASE.json"
+    #json_path = "DATA/input/ieee14_BESS.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -812,8 +818,8 @@ if __name__ == "__main__":
         sistema=sistema,
         n_dias=n_dias,
         n_horas=n_horas,
-        carga_incerteza=0.2,
-        vento_variacao=0.1,
+        carga_incerteza=0.0,
+        vento_variacao=0.0,
         seed=seed
     )
     fatores_carga, fatores_vento = avaliador.gerar_tudo()

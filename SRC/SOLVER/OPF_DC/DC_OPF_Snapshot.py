@@ -637,7 +637,7 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee33_BASE.json"
+    json_path = "DATA/input/ieee118_BASE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -672,7 +672,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 4. Definir parâmetros para uma hora específica
     # -------------------------------------------------------------------------
-    hora_desejada = 17
+    hora_desejada = 0
 
     seed = secrets.randbits(32)
     from UTILS.EvaluateFactors import EvaluateFactors

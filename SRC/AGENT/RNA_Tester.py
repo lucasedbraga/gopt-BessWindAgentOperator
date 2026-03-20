@@ -25,15 +25,17 @@ import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "../DATA/input/ieee33_BASE.json"
-DB_PATH = "../DATA/output/RNA_resultados_PL_acoplado.db"
-MODELS_DIR = "../DATA/output/modelos_especialistas_v4"
+JSON_PATH = "DATA/input/ieee14_BASE.json"
+DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
+MODELS_DIR = "DATA/output/modelos_especialistas_v4"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
 
 # Barras com medição (para create_wide_format)
-BARRAS_COM_MEDICAO = [3]
+#BARRAS_COM_MEDICAO = [3]
+#BARRAS_COM_MEDICAO = [3, 5, 8]  # IEEE 14
+BARRAS_COM_MEDICAO = [3, 5, 8, 17]  # IEEE 33
 
 # Parâmetros da geração de cenários (usados apenas se não houver nenhum cenário no banco)
 N_ITERACOES = 1          # Vamos gerar apenas UM cenário
@@ -132,11 +134,6 @@ def prepare_X_y(df_wide, remove_constants=True):
     
     df_clean = df_wide.dropna(subset=all_feature_cols)
     X = df_clean[all_feature_cols]
-    
-    if remove_constants:
-        constant_features = X.columns[X.std() == 0].tolist()
-        if constant_features:
-            X = X.drop(columns=constant_features)
     
     # Construir targets com base nas features remanescentes
     target_cols = []
@@ -288,12 +285,12 @@ def gerar_cenario_unico():
         traceback.print_exc()
         return None
 
-# ========== Função para extrair dados de comparação ==========
+# ========== Função para extrair dados de comparação (modificada) ==========
 def extrair_comparacao(cen_id, models):
     """
     Para um dado cen_id e os modelos carregados, retorna um dicionário com:
         hora -> {
-            'y_true': DataFrame com os valores reais (targets) - UMA ÚNICA LINHA,
+            'y_true': np.array com os valores reais (targets) - UMA ÚNICA LINHA,
             'y_pred': np.array com as predições - UMA ÚNICA LINHA,
             'target_names': lista dos nomes dos targets
         }
@@ -330,26 +327,38 @@ def extrair_comparacao(cen_id, models):
         else:
             print(f"   Hora {hora:02d}: apenas 1 linha disponível")
         
-        X_raw, y_raw = prepare_X_y(df_hora, remove_constants=False)
+        # --- Extrair features (X) ---
+        X_values = []
+        features_faltando = []
+        for feat in feature_names:
+            if feat in df_hora.columns:
+                X_values.append(df_hora[feat].iloc[0])
+            else:
+                # Se a feature não existir, usa 0 (ou outro valor padrão)
+                X_values.append(0.0)
+                features_faltando.append(feat)
+        if features_faltando:
+            print(f"   Aviso: features ausentes preenchidas com 0: {features_faltando}")
         
-        # Garantir que temos todas as features necessárias
-        try:
-            X = X_raw[feature_names]
-        except KeyError as e:
-            print(f"   Erro: Feature {e} não encontrada em X_raw para hora {hora}")
+        X = np.array(X_values).reshape(1, -1)  # Formato (1, n_features)
+        
+        # --- Extrair targets reais (y_true) ---
+        y_true_values = []
+        targets_faltando = []
+        for tgt in target_names:
+            if tgt in df_hora.columns:
+                y_true_values.append(df_hora[tgt].iloc[0])
+            else:
+                targets_faltando.append(tgt)
+        if targets_faltando:
+            print(f"   Erro: targets ausentes no DataFrame: {targets_faltando}")
+            print(f"   Não é possível comparar para hora {hora}. Pulando.")
             continue
         
-        # Garantir que temos todos os targets necessários
-        try:
-            y_true = y_raw[target_names]
-        except KeyError as e:
-            print(f"   Erro: Target {e} não encontrado em y_raw para hora {hora}")
-            continue
+        y_true = np.array(y_true_values).reshape(1, -1)  # Formato (1, n_targets)
         
-        # Predição - reshape para 2D se necessário
-        y_pred = pipeline.predict(X)
-        
-        # Garantir que y_pred seja 2D (1, n_targets)
+        # --- Predição ---
+        y_pred = pipeline.predict(X)  # Já deve retornar (1, n_targets)
         if y_pred.ndim == 1:
             y_pred = y_pred.reshape(1, -1)
         
@@ -360,19 +369,19 @@ def extrair_comparacao(cen_id, models):
         }
         
         print(f"   Hora {hora:02d}: 1 amostra processada.")
-        print(f"   Shapes - y_true: {y_true.shape}, y_pred: {y_pred.shape}")
+        print(f"   Shapes - X: {X.shape}, y_true: {y_true.shape}, y_pred: {y_pred.shape}")
     
     return resultados
 
-# ========== Função para imprimir detalhes das diferenças ==========
+# ========== Função para imprimir detalhes das diferenças (adaptada) ==========
 def print_detalhes_comparacao(resultados):
     """
     Exibe uma tabela para cada hora com os valores reais, previstos e diferenças.
     """
     for hora in sorted(resultados.keys()):
         data = resultados[hora]
-        y_true = data['y_true'].iloc[0]  # Series
-        y_pred = data['y_pred'][0]        # array 1D
+        y_true = data['y_true'][0]        # array 1D
+        y_pred = data['y_pred'][0]         # array 1D
         target_names = data['target_names']
         
         print(f"\n{'='*60}")
@@ -380,14 +389,16 @@ def print_detalhes_comparacao(resultados):
         print(f"{'='*60}")
         
         # Criar DataFrame para exibição
+        erro_abs = np.abs(y_true - y_pred)
+
         df_detalhes = pd.DataFrame({
             'Target': target_names,
-            'Real': y_true.values,
+            'Real': y_true,
             'Previsto': y_pred,
-            'Diferença (abs)': np.abs(y_true.values - y_pred),
+            'Diferença (abs)': erro_abs,
             'Diferença (%)': np.where(
-                np.abs(y_true.values) > 1e-6,
-                np.abs(y_true.values - y_pred) / np.abs(y_true.values) * 100,
+                np.abs(y_true) > 1e-6,
+                erro_abs / np.abs(y_true) * 100,
                 np.nan
             )
         })
@@ -398,79 +409,82 @@ def print_detalhes_comparacao(resultados):
         print(df_detalhes.to_string(index=False))
         print()
 
-# ========== Funções de plotagem ==========
+# ========== Funções de plotagem (ajustadas para aceitar múltiplos tipos) ==========
 def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
     """
-    Plota gráficos de barras comparando real vs predito para BESS_operation e CURTAILMENT.
+    Plota gráficos de barras comparando real vs predito.
+    Agora separa os targets por prefixo (BESS_operation, CURTAILMENT, PLOAD_estimado)
+    e gera um gráfico para cada grupo.
     """
     if hora not in resultados:
         return
     
     data = resultados[hora]
-    y_true = data['y_true']
-    y_pred = data['y_pred']
+    y_true = data['y_true'][0]        # array 1D
+    y_pred = data['y_pred'][0]         # array 1D
     target_names = data['target_names']
     
-    # Separar targets por tipo
-    bess_targets = [name for name in target_names if 'BESS_operation' in name]
-    curt_targets = [name for name in target_names if 'CURTAILMENT' in name]
+    # Agrupar targets por prefixo
+    grupos = {}
+    for i, name in enumerate(target_names):
+        if 'BESS_operation' in name:
+            key = 'BESS_operation'
+        elif 'CURTAILMENT' in name:
+            key = 'CURTAILMENT'
+        elif 'PLOAD_estimado' in name:
+            key = 'PLOAD_estimado'
+        else:
+            key = 'Outros'
+        grupos.setdefault(key, []).append(i)
     
-    # Extrair valores para BESS
-    if len(bess_targets) > 0:
-        # Pegar a primeira linha (única amostra)
-        bess_true = y_true[bess_targets].iloc[0].values  # Shape: (n_barras,)
-        bess_pred = y_pred[0, [target_names.index(t) for t in bess_targets]]  # Shape: (n_barras,)
+    # Gerar um gráfico para cada grupo
+    for grupo, indices in grupos.items():
+        if not indices:
+            continue
         
-        barras_bess = [t.replace('BESS_operation_result_BAR', '') for t in bess_targets]
+        # Extrair valores para este grupo
+        true_vals = y_true[indices]
+        pred_vals = y_pred[indices]
+        nomes = [target_names[i] for i in indices]
         
-        fig, ax = plt.subplots(figsize=(max(6, len(barras_bess) * 0.8), 5))
-        x = np.arange(len(barras_bess))
+        # Extrair número da barra (para rótulos)
+        if grupo == 'PLOAD_estimado':
+            barras = [n.replace('PLOAD_estimado_BAR', '') for n in nomes]
+        elif grupo == 'BESS_operation':
+            barras = [n.replace('BESS_operation_result_BAR', '') for n in nomes]
+        elif grupo == 'CURTAILMENT':
+            barras = [n.replace('CURTAILMENT_total_result_BAR', '') for n in nomes]
+        else:
+            barras = nomes  # fallback
+        
+        # Criar gráfico
+        fig, ax = plt.subplots(figsize=(max(6, len(barras) * 0.8), 5))
+        x = np.arange(len(barras))
         width = 0.35
         
-        ax.bar(x - width/2, bess_true, width, label='Real', color='steelblue')
-        ax.bar(x + width/2, bess_pred, width, label='Previsto', color='orange')
+        ax.bar(x - width/2, true_vals, width, label='Real', color='steelblue')
+        ax.bar(x + width/2, pred_vals, width, label='Previsto', color='orange')
         
         ax.set_xlabel('Barra')
         ax.set_ylabel('Potência (MW)')
-        ax.set_title(f'Hora {hora:02d} - Operação da Bateria (BESS)')
+        if grupo == 'BESS_operation':
+            titulo = f'Hora {hora:02d} - Operação da Bateria (BESS)'
+        elif grupo == 'CURTAILMENT':
+            titulo = f'Hora {hora:02d} - Corte Eólico (CURTAILMENT)'
+        elif grupo == 'PLOAD_estimado':
+            titulo = f'Hora {hora:02d} - Carga Estimada (PLOAD_estimado)'
+        else:
+            titulo = f'Hora {hora:02d} - {grupo}'
+        
+        ax.set_title(titulo)
         ax.set_xticks(x)
-        ax.set_xticklabels(barras_bess)
+        ax.set_xticklabels(barras)
         ax.legend()
         ax.grid(True, alpha=0.3)
         
         if save_fig:
             os.makedirs(output_dir, exist_ok=True)
-            fname = os.path.join(output_dir, f'bess_comparison_hora_{hora:02d}.png')
-            plt.savefig(fname, dpi=150, bbox_inches='tight')
-            print(f"   Gráfico salvo: {fname}")
-        plt.show()
-    
-    # Extrair valores para CURTAILMENT
-    if len(curt_targets) > 0:
-        # Pegar a primeira linha (única amostra)
-        curt_true = y_true[curt_targets].iloc[0].values  # Shape: (n_barras,)
-        curt_pred = y_pred[0, [target_names.index(t) for t in curt_targets]]  # Shape: (n_barras,)
-        
-        barras_curt = [t.replace('CURTAILMENT_total_result_BAR', '') for t in curt_targets]
-        
-        fig, ax = plt.subplots(figsize=(max(6, len(barras_curt) * 0.8), 5))
-        x = np.arange(len(barras_curt))
-        width = 0.35
-        
-        ax.bar(x - width/2, curt_true, width, label='Real', color='steelblue')
-        ax.bar(x + width/2, curt_pred, width, label='Previsto', color='orange')
-        
-        ax.set_xlabel('Barra')
-        ax.set_ylabel('Potência (MW)')
-        ax.set_title(f'Hora {hora:02d} - Corte Eólico (CURTAILMENT)')
-        ax.set_xticks(x)
-        ax.set_xticklabels(barras_curt)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        if save_fig:
-            os.makedirs(output_dir, exist_ok=True)
-            fname = os.path.join(output_dir, f'curtailment_comparison_hora_{hora:02d}.png')
+            fname = os.path.join(output_dir, f'{grupo.lower()}_comparison_hora_{hora:02d}.png')
             plt.savefig(fname, dpi=150, bbox_inches='tight')
             print(f"   Gráfico salvo: {fname}")
         plt.show()

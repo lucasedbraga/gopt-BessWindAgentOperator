@@ -216,4 +216,7 @@ IHM/PowerBalance.ipynb
 IHM/RNATest.ipynb
 IHM/Snapshot.ipynb
 DATA/output_B6L8/*
-
+DATA/output_IEEE14/*
+DATA/output_IEEE33/*
+DATA/output_IEEE118/*
+DATA/output_curt/*

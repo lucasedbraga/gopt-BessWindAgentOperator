@@ -39,7 +39,8 @@ MAX_ITER = 2000
 TOLERANCE_REL = 0.05                # 5% de erro relativo
 TOLERANCE_ABS = 0.1                 # tolerância absoluta para valores próximos de zero
 MIN_SAMPLES_PER_GROUP = 30          # número mínimo de amostras por hora
-BARRAS_COM_MEDICAO = [3]            # lista de BAR_id que possuem medição real
+#BARRAS_COM_MEDICAO = [3, 5, 8]            # lista de BAR_id que possuem medição real
+BARRAS_COM_MEDICAO = [3, 5, 8, 17]            # lista de BAR_id que possuem medição real
 REMOVE_CONSTANT_COLUMNS = True      # se True, remove colunas com valores constantes (ex.: tudo zero)
 # ========================================================
 
@@ -62,7 +63,6 @@ def load_data(db_path):
                BESS_operation_result
         FROM DBAR_results
         WHERE hora_simulacao IN (16,17,18)
-        LIMIT 100000000
     '''
 
     df = pd.read_sql_query(query, conn)
@@ -141,9 +141,9 @@ def prepare_X_y(df_wide, remove_constants=True):
         constant_X = X.columns[X.std() == 0].tolist()
         if constant_X:
             X = X.drop(columns=constant_X)
-            print(f"   Removidas features constantes: {constant_X}")
+            #print(f"   Removidas features constantes: {constant_X}")
         
-        # Em y
+        #Em y
         constant_y = y.columns[y.std() == 0].tolist()
         if constant_y:
             y = y.drop(columns=constant_y)

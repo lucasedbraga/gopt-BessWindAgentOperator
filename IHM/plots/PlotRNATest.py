@@ -23,15 +23,17 @@ import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "../DATA/input/ieee33_BASE.json"
-DB_PATH = "../DATA/output/RNA_resultados_PL_acoplado.db"
-MODELS_DIR = "../DATA/output/modelos_especialistas_v4"
+JSON_PATH = "DATA/input/ieee14_BASE.json"
+DB_PATH = "DATA/output/RNA_resultados_PL_acoplado.db"
+MODELS_DIR = "DATA/output/modelos_especialistas_v4"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
 
 # Barras com medição (para create_wide_format)
-BARRAS_COM_MEDICAO = [3]
+#BARRAS_COM_MEDICAO = [3]
+BARRAS_COM_MEDICAO = [3, 5, 8]  # IEEE 14
+#BARRAS_COM_MEDICAO = [3, 5, 8, 17]  # IEEE 33
 
 # Parâmetros da geração de cenários (usados apenas se não for fornecido um cenário existente)
 N_ITERACOES = 1          # Vamos gerar apenas UM cenário
