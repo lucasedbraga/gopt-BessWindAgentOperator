@@ -36,8 +36,8 @@ class EvaluateFactors:
         
         # Perfil horário normalizado (pico = 1.0)
         self.carga_perfil_horario = np.array([
-            0.35, 0.32, 0.30, 0.30, 0.32, 0.40,  # 0-5h (madrugada)
-            0.55, 0.70, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
+            0.65, 0.62, 0.60, 0.60, 0.62, 0.70,  # 0-5h (madrugada)
+            0.75, 0.70, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
             0.92, 0.90, 0.88, 0.90, 0.92, 0.95,  # 12-17h (tarde)
             1.00, 0.98, 0.95, 0.90, 0.75, 0.55   # 18-23h (noite/pico)
         ])
