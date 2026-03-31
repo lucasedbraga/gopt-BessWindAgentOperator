@@ -220,3 +220,5 @@ DATA/output_IEEE14/*
 DATA/output_IEEE33/*
 DATA/output_IEEE118/*
 DATA/output_curt/*
+SRC/DB/getters/*
+

@@ -398,7 +398,7 @@ class DCOPFSnapshot:
             caller_frame = frame.f_back
             caller_filename = caller_frame.f_code.co_filename
             base = os.path.splitext(os.path.basename(caller_filename))[0]
-            lp_filename = f"DATA/output/{base}_snapshot.lp"
+            lp_filename = f"DATA/output_CUR_Oficial/{base}_snapshot.lp"
             os.makedirs(os.path.dirname(lp_filename), exist_ok=True)
             self.model.write(lp_filename)
             print(f"Modelo escrito em {lp_filename}")
@@ -655,7 +655,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     print("\n2. Configurando banco de dados...")
     
-    db_handler = OPF_DBHandler('DATA/output/resultados_snapshot.db')
+    db_handler = OPF_DBHandler('DATA/output_CUR_Oficial/resultados_snapshot.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S') + "_snapshot"
     print(f"   ✓ Cenário ID: {cen_id}")

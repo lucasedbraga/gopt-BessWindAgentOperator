@@ -436,7 +436,7 @@ class TimeCoupledOPFModel:
             # Custo térmico (USD/pu)
             for t in range(self.horizon_time):
                 for g in range(self.sistema.NGER_CONV):
-                    custo = float(self.sistema.CPG_CONV[g])          # garantir escalar
+                    custo = 1 #float(self.sistema.CPG_CONV[g])          # garantir escalar
                     expr += custo * self.PGER[t, g]
 
             # Déficit
@@ -567,7 +567,7 @@ class TimeCoupledOPFModel:
             caller_frame = frame.f_back
             caller_filename = caller_frame.f_code.co_filename
             base = os.path.splitext(os.path.basename(caller_filename))[0]
-            lp_filename = f"DATA/output/{base}_timecoupled.lp"
+            lp_filename = f"DATA/output_CUR_Oficial/{base}_timecoupled.lp"
             os.makedirs(os.path.dirname(lp_filename), exist_ok=True)
             self.model.write(lp_filename)
             print(f"Modelo escrito em {lp_filename}")
@@ -760,6 +760,7 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
+    #json_path = "DATA/input/ieee14_BASE.json"
     json_path = "DATA/input/ieee118_BASE.json"
     #json_path = "DATA/input/ieee14_BESS.json"
     if not os.path.exists(json_path):
@@ -778,7 +779,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 2. Parâmetros da simulação
     # -------------------------------------------------------------------------
-    n_dias = 7
+    n_dias = 1
     n_horas = 24
     T = n_dias * n_horas
     print(f"\n2. Simulando {n_dias} dias x {n_horas} horas = {T} períodos.")
@@ -793,7 +794,7 @@ if __name__ == "__main__":
     # 4. Configurar banco de dados
     # -------------------------------------------------------------------------
     print("\n3. Configurando banco de dados...")
-    db_handler = OPF_DBHandler('DATA/output/resultados_PL_acoplado.db')
+    db_handler = OPF_DBHandler('DATA/output_CUR_Oficial/resultados_PL_acoplado.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S')
     print(f"   ✓ Cenário ID: {cen_id}")
@@ -818,8 +819,8 @@ if __name__ == "__main__":
         sistema=sistema,
         n_dias=n_dias,
         n_horas=n_horas,
-        carga_incerteza=0.2,
-        vento_variacao=0.1,
+        carga_incerteza=0.05,
+        vento_variacao=0.9,
         seed=seed
     )
     fatores_carga, fatores_vento = avaliador.gerar_tudo()

@@ -28,11 +28,12 @@ from SOLVER.OPF_DC.DC_OPF_Acoplado import TimeCoupledOPFModel
 # ==============================================================================================
 
 # Configurações
-JSON_PATH = "DATA/input/ieee14_BESS.json"        # arquivo do sistema
-DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
+#JSON_PATH = "DATA/input/ieee14_BASE.json"        # arquivo do sistema
+JSON_PATH = "DATA/input/ieee118_BASE.json"       
+DB_PATH = "DATA/output_CUR_Oficial/RNA_DATA_PL_acoplado.db"
 
-N_ITERACOES = 1000      # número total de cenários
-N_DIAS = 7             # dias por simulação
+N_ITERACOES = 9000      # número total de cenários
+N_DIAS = 1             # dias por simulação
 N_HORAS = 24            # horas por dia
 
 # Parâmetros da bateria 
@@ -40,7 +41,7 @@ SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5     
 
 # Opções do modelo
-CONSIDERAR_PERDAS = False
+CONSIDERAR_PERDAS = True
 SOLVER_NAME = 'highs'      
 TOL = 1e-4
 MAX_ITER = 5
@@ -49,7 +50,7 @@ WRITE_LP = False
 
 def main():
     print("=" * 70)
-    print("GERADOR DE DADOS COM MODELO INTEGRADO NO TEMPO (DC OPF) - PyOptInterface")
+    print("GERADOR DE DADOS (DC OPF Acoplado)")
     print(f"Total de iterações: {N_ITERACOES}")
     print("=" * 70)
 
@@ -108,8 +109,8 @@ def main():
                 sistema=sistema,
                 n_dias=N_DIAS,
                 n_horas=N_HORAS,
-                carga_incerteza=0.2,
-                vento_variacao=0.1,
+                carga_incerteza=0.05,
+                vento_variacao=0,
                 seed=seed
             )
             fatores_carga, fatores_vento = avaliador.gerar_tudo()

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script principal para OPF com RNAs especialistas.
-Versão com todas as previsões da RNA fixadas como parâmetros.
-CORRIGIDO: salva valores em MW, garantindo relação PGWIND_disponivel = PGWIND + CURTAILMENT.
+Script principal para OPF com RNAs especialistas (versão v6).
+- Utiliza modelos treinados por hora (16,17,18) que preveem a operação da bateria.
+- Features: BESS_init_cenario, PGWIND_disponivel_cenario, PGER_CONV_total_result,
+            ANG_result, PLOAD_medido.
+- O curtailment não é previsto; assume-se PGWIND = PGWIND_disponivel.
 """
 
 import sys
@@ -19,6 +21,7 @@ import pandas as pd
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 import joblib
+import json
 
 # =============================================================================
 # Dataclass de resultado
@@ -51,7 +54,7 @@ class OPFResult:
 
 
 # =============================================================================
-# Modelo DC OPF com RNA
+# Modelo DC OPF com RNA (atualizado para v6)
 # =============================================================================
 @dataclass
 class DC_OPF_RNA_Model:
@@ -60,17 +63,26 @@ class DC_OPF_RNA_Model:
         self.sistema = None
         self.considerar_perdas = True
         self.pipeline = None
+        self.feature_names = None
+        self.target_names = None
 
-    def build(self, sistema, df_measures, pipeline, fator_carga,
-              pgwind_disponivel_por_gerador, soc_atual_dict, considerar_perdas=False):
+    def build(self, sistema, df_features, pipeline, feature_names, target_names,
+              fator_carga, pgwind_disponivel_por_gerador, soc_atual_dict,
+              considerar_perdas=False):
         """
         Constrói o modelo de otimização.
-        - pgwind_disponivel_por_gerador: lista com a disponibilidade real (MW) para cada gerador eólico
-        - soc_atual_dict: dicionário com SOC inicial por barra (usado apenas para feature, não para restrição)
+        - df_features: DataFrame com uma linha contendo todas as colunas de features
+                       esperadas pelo pipeline.
+        - pgwind_disponivel_por_gerador: lista com a disponibilidade real (MW)
+                                         para cada gerador eólico.
+        - soc_atual_dict: dicionário com SOC inicial por barra (usado apenas
+                          para feature, não para restrição).
         """
         self.sistema = sistema
         self.considerar_perdas = considerar_perdas
         self.pipeline = pipeline
+        self.feature_names = feature_names
+        self.target_names = target_names
 
         m = ConcreteModel()
         self.model = m
@@ -94,59 +106,46 @@ class DC_OPF_RNA_Model:
             m.BATTERIES = Set(initialize=[])
 
         # === PARÂMETROS (carga) ===
-        # Carga base (pu) convertida para MW
         m.PLOAD_BASE = Param(m.BUSES, initialize=lambda m, b: s.PLOAD[b] * s.SB)
         m.FATOR_CARGA = Param(initialize=fator_carga)
 
-        # === PARÂMETROS para eólica e bateria (fixados pela RNA) ===
-        # Disponibilidade eólica (já conhecida) - em MW
-        m.PGWIND_disponivel = Param(m.WIND_GENERATORS, initialize=lambda m, g: pgwind_disponivel_por_gerador[g])
+        # === PARÂMETROS para eólica e bateria ===
+        # Disponibilidade eólica (MW)
+        m.PGWIND_disponivel = Param(m.WIND_GENERATORS,
+                                    initialize=lambda m, g: pgwind_disponivel_por_gerador[g])
 
-        # Previsão da RNA
-        feature_cols = ['BAR_id', 'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result']
-        # Garantir que df_measures contém essas colunas
-        df_measures = df_measures[feature_cols].dropna().sort_values('BAR_id').reset_index(drop=True)
-
+        # Previsão da RNA: apenas BESS_operation (curtailment não é previsto)
         if self.pipeline is not None:
-            X = df_measures[feature_cols].copy()
-            pred = self.pipeline.predict(X)
+            # Garantir que as colunas estão na ordem esperada
+            X = df_features[self.feature_names].copy()
+            pred = self.pipeline.predict(X)  # shape (1, n_targets)
         else:
-            pred = np.zeros((len(df_measures), 2))
+            pred = np.zeros((1, len(self.target_names)))
 
-        # Mapear predições por BAR_id
-        pred_dict = {}
-        for idx, row in df_measures.iterrows():
-            bar_id = int(row['BAR_id'])
-            pred_dict[bar_id] = {
-                'curtailment': pred[idx, 0],
-                'bess_op': pred[idx, 1]
-            }
-
-        # Parâmetros: curtailment e operação da bateria
-        barra_por_gerador = getattr(s, 'bus_wind', list(range(s.NGER_EOL)))
-        m.CURTAILMENT = Param(m.WIND_GENERATORS, initialize=lambda m, g: 0.0, mutable=True)
-        for g in m.WIND_GENERATORS:
-            barra = barra_por_gerador[g]
-            bar_id = barra + 1
-            if bar_id in pred_dict:
-                curt_pred = pred_dict[bar_id]['curtailment']
-                # Garantir que não ultrapasse a disponibilidade
-                curt_final = max(0, min(curt_pred, pgwind_disponivel_por_gerador[g]))
-                m.CURTAILMENT[g] = curt_final
-            else:
-                m.CURTAILMENT[g] = 0.0
-
-        # PGWIND resultante = disponivel - curtailment (também como Parâmetro)
-        m.PGWIND = Param(m.WIND_GENERATORS, initialize=lambda m, g: m.PGWIND_disponivel[g] - m.CURTAILMENT[g])
+        # Mapear predições de BESS_operation por barra
+        pred_bess_dict = {}
+        for i, tgt in enumerate(self.target_names):
+            if tgt.startswith('BESS_operation_result_BAR'):
+                bar_id = int(tgt.split('_BAR')[-1])
+                pred_bess_dict[bar_id] = pred[0, i]
 
         # Operação da bateria (fixada)
         m.BatteryOperation = Param(m.BATTERIES, initialize=0.0, mutable=True)
         for b in m.BATTERIES:
             bar_id = b + 1
-            if bar_id in pred_dict:
-                m.BatteryOperation[b] = pred_dict[bar_id]['bess_op']
+            if bar_id in pred_bess_dict:
+                m.BatteryOperation[b] = pred_bess_dict[bar_id]
             else:
                 m.BatteryOperation[b] = 0.0
+
+        # CURTAILMENT não é previsto pela RNA: assume-se zero (aproveitamento total)
+        m.CURTAILMENT = Param(m.WIND_GENERATORS, initialize=0.0, mutable=True)
+        for g in m.WIND_GENERATORS:
+            m.CURTAILMENT[g] = 0.0
+
+        # PGWIND = disponível - curtailment
+        m.PGWIND = Param(m.WIND_GENERATORS,
+                         initialize=lambda m, g: m.PGWIND_disponivel[g] - m.CURTAILMENT[g])
 
         # === VARIÁVEIS ===
         m.PGER = Var(m.CONV_GENERATORS, within=NonNegativeReals)                # MW
@@ -178,22 +177,22 @@ class DC_OPF_RNA_Model:
         return m
 
     def add_constraints(self):
-        from SOLVER.OPF_DC_Snapshot.RES.EletricConstraints import DCElectricConstraints
-        from SOLVER.OPF_DC_Snapshot.RES.TermicGeneratorConstraint import TermicGeneratorConstraints
+        from SOLVER.OPF_DC.RES import EletricConstraints
+        from SOLVER.OPF_DC.RES import ThermalGeneratorConstraints
 
         m = self.model
         s = self.sistema
 
         # Limites dos geradores convencionais
-        TermicGeneratorConstraints.add_generator_limits_constraints(m, s)
+        ThermalGeneratorConstraints.add_generator_limits_constraints(m, s)
 
         # Déficit
-        DCElectricConstraints.add_deficit_constraints(m, s)
+        EletricConstraints.add_deficit_constraints(m, s)
 
         # Fluxo nas linhas
-        DCElectricConstraints.add_line_flow_constraints(m, s)
+        EletricConstraints.add_line_flow_constraints(m, s)
 
-        # Balanço de potência personalizado (usa os parâmetros fixos de eólica e bateria)
+        # Balanço de potência personalizado
         def power_balance_rule(m, b):
             carga = m.PLOAD_BASE[b] * m.FATOR_CARGA
             ger_conv = sum(m.PGER[g] for g in m.CONV_GENERATORS if s.BARPG_CONV[g] == b)
@@ -225,7 +224,7 @@ class DC_OPF_RNA_Model:
         m.OBJ = Objective(expr=custo_conv + custo_def, sense=minimize)
 
     # -------------------------------------------------------------------------
-    # Métodos para Perdas
+    # Métodos para Perdas (opcionais)
     # -------------------------------------------------------------------------
     def update_losses(self, perdas_barra: np.ndarray):
         if not self.considerar_perdas:
@@ -362,11 +361,37 @@ class DC_OPF_RNA_Model:
 
 
 # =============================================================================
+# Funções auxiliares para preparação dos dados de entrada
+# =============================================================================
+def build_feature_dataframe(sistema, soc_atual_dict, pgwind_disponivel_barra_mw,
+                            angulos_barra_rad, pload_medido_barra_mw):
+    """
+    Constrói um DataFrame (uma linha) com todas as features esperadas pela RNA.
+    As colunas são no formato: <feature>_BAR<barra_id>.
+    """
+    data = {}
+    for barra in range(sistema.NBAR):
+        bar_id = barra + 1
+        # BESS_init_cenario (SOC)
+        soc = soc_atual_dict.get(barra, 0.5)
+        data[f'BESS_init_cenario_BAR{bar_id}'] = soc
+        # PGWIND_disponivel_cenario (MW)
+        data[f'PGWIND_disponivel_cenario_BAR{bar_id}'] = pgwind_disponivel_barra_mw[barra]
+        # PGER_CONV_total_result (inicialmente zero)
+        data[f'PGER_CONV_total_result_BAR{bar_id}'] = 0.0
+        # ANG_result (radianos)
+        data[f'ANG_result_BAR{bar_id}'] = angulos_barra_rad[barra]
+        # PLOAD_medido (MW)
+        data[f'PLOAD_medido_BAR{bar_id}'] = pload_medido_barra_mw[barra]
+    return pd.DataFrame([data])
+
+
+# =============================================================================
 # MAIN – SIMULAÇÃO HORÁRIA
 # =============================================================================
 def main():
     print("=" * 70)
-    print("SISTEMA DE OTIMIZAÇÃO DE FLUXO DE POTÊNCIA (OPF) COM RNAs ESPECIALISTAS")
+    print("SISTEMA DE OTIMIZAÇÃO DE FLUXO DE POTÊNCIA (OPF) COM RNAs ESPECIALISTAS V6")
     print("=" * 70)
     try:
         # ------------------------------------------------------------------
@@ -393,7 +418,6 @@ def main():
         # 2. CARREGAR DADOS DE VENTO
         # ------------------------------------------------------------------
         print("\n2. Carregando dados de vento...")
-        filepath = r"/home/lucasedbraga/repositorios/ufjf/mestrado_luedsbr/SRC/SOLVER/DB/getters/intermittent-renewables-production-france.csv"
         filepath = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
         if not os.path.exists(filepath):
             print(f"ERRO: Arquivo de vento não encontrado: {filepath}")
@@ -415,10 +439,10 @@ def main():
         n_horas = 24
         print(f"\n3. Configurando simulação: {n_dias} dias, {n_horas} horas/dia")
 
-        # Data base para determinar dia da semana
+        # Data base para determinar dia da semana (não mais usado, mantido para compatibilidade)
         data_base = datetime(2026, 3, 9)  # segunda-feira
 
-        # SOC inicial das baterias (apenas para feature, não restrição)
+        # SOC inicial das baterias
         if hasattr(sistema, 'BATTERY_CAPACITY'):
             if isinstance(sistema.BATTERY_CAPACITY, (list, np.ndarray)):
                 soc_inicial_bateria = {b: 0.5 * cap for b, cap in enumerate(sistema.BATTERY_CAPACITY) if b in sistema.BATTERIES}
@@ -458,36 +482,44 @@ def main():
         # ------------------------------------------------------------------
         # 5. SIMULAÇÃO HORÁRIA
         # ------------------------------------------------------------------
-        print("\n4. Iniciando simulação horária com RNAs especialistas...")
-        soc_atual = soc_inicial_bateria.copy()  # para usar nas features
+        print("\n4. Iniciando simulação horária com RNAs especialistas v6...")
+        soc_atual = soc_inicial_bateria.copy()
         resultados_por_snapshot = []
 
-        # Cache de pipelines
-        pipeline_cache = {}
+        # Inicializar ângulos (radianos) - assumindo 0 para todas as barras no início
+        angulos_atual = np.zeros(sistema.NBAR)
+
+        # Cache de modelos por hora
+        model_cache = {}
 
         for dia in range(n_dias):
             data_atual = data_base + timedelta(days=dia)
-            dia_semana = data_atual.weekday()  # 0 = segunda
+            dia_semana = data_atual.weekday()  # 0 = segunda (não usado, apenas para contexto)
 
             for hora in range(n_horas):
                 print(f"\n   Processando Dia {dia+1} (semana {dia_semana}), Hora {hora:02d}:00 ...")
 
-                # Carregar pipeline
-                cache_key = (dia_semana, hora)
-                if cache_key in pipeline_cache:
-                    pipeline = pipeline_cache[cache_key]
+                # Carregar pipeline e metadata para esta hora
+                if hora not in model_cache:
+                    model_dir = f'DATA/output/modelos_especialistas_v6/hora_{hora:02d}'
+                    pipeline_path = os.path.join(model_dir, 'pipeline.joblib')
+                    metadata_path = os.path.join(model_dir, 'metadata.json')
+
+                    if not os.path.exists(pipeline_path) or not os.path.exists(metadata_path):
+                        print(f"   ⚠ Aviso: modelo para hora {hora} não encontrado. Usando fallback (tudo zero).")
+                        pipeline = None
+                        feature_names = []
+                        target_names = []
+                    else:
+                        pipeline = joblib.load(pipeline_path)
+                        with open(metadata_path, 'r') as f:
+                            metadata = json.load(f)
+                        feature_names = metadata['feature_names']
+                        target_names = metadata['target_names']
+                        print(f"   → Pipeline carregado de: {pipeline_path}")
+                    model_cache[hora] = (pipeline, feature_names, target_names)
                 else:
-                    possible_dirs = [f"dia_{dia_semana}", f"dia_{dia_semana+1}"]
-                    pipeline = None
-                    for d in possible_dirs:
-                        pipeline_path = f'DATA/output/modelos_especialistas/{d}/hora_{hora:02d}/pipeline.joblib'
-                        if os.path.exists(pipeline_path):
-                            pipeline = joblib.load(pipeline_path)
-                            print(f"   → Pipeline carregado de: {pipeline_path}")
-                            break
-                    if pipeline is None:
-                        print(f"   ⚠ Aviso: modelo não encontrado. Usando fallback (tudo zero).")
-                    pipeline_cache[cache_key] = pipeline
+                    pipeline, feature_names, target_names = model_cache[hora]
 
                 f_v = fator_vento[dia, hora]
                 f_c = fator_carga[dia, hora]
@@ -495,37 +527,34 @@ def main():
                 # Disponibilidade eólica por gerador (MW)
                 pgwind_disp_por_gerador = [pmax_eol[g] * f_v * sistema.SB for g in range(sistema.NGER_EOL)]
 
-                # Disponibilidade por barra (para features)
+                # Disponibilidade eólica por barra (MW)
                 disp_eolica_barra_mw = np.zeros(sistema.NBAR)
                 for g in range(sistema.NGER_EOL):
                     barra = barra_eol_por_gerador[g]
                     disp_eolica_barra_mw[barra] += pgwind_disp_por_gerador[g]
 
-                # Montar DataFrame com as features esperadas pela RNA
-                rows = []
-                for barra in range(sistema.NBAR):
-                    soc_val = soc_atual.get(barra, 0.5)
-                    if isinstance(soc_val, np.ndarray):
-                        soc_val = float(soc_val[0]) if soc_val.size > 0 else 0.5
+                # Carga medida por barra (MW)
+                carga_medida_barra_mw = np.zeros(sistema.NBAR)
+                for b in range(sistema.NBAR):
+                    carga_medida_barra_mw[b] = sistema.PLOAD[b] * sistema.SB * f_c
 
-                    disp_eolica_mw = disp_eolica_barra_mw[barra]
-                    pger_barra_mw = 0.0  # placeholder
+                # Construir DataFrame de features
+                df_features = build_feature_dataframe(
+                    sistema=sistema,
+                    soc_atual_dict=soc_atual,
+                    pgwind_disponivel_barra_mw=disp_eolica_barra_mw,
+                    angulos_barra_rad=angulos_atual,
+                    pload_medido_barra_mw=carga_medida_barra_mw
+                )
 
-                    rows.append({
-                        'BAR_id': barra + 1,
-                        'BESS_init_cenario': soc_val,
-                        'PGWIND_disponivel_cenario': disp_eolica_mw,
-                        'PGER_CONV_total_result': pger_barra_mw
-                    })
-
-                df_measures = pd.DataFrame(rows).sort_values('BAR_id').reset_index(drop=True)
-                #TODO: Avaliar SOC atual e SOC final do modelo
                 # Construir modelo
                 modelo = DC_OPF_RNA_Model()
                 modelo.build(
                     sistema=sistema,
-                    df_measures=df_measures,
+                    df_features=df_features,
                     pipeline=pipeline,
+                    feature_names=feature_names,
+                    target_names=target_names,
                     fator_carga=f_c,
                     pgwind_disponivel_por_gerador=pgwind_disp_por_gerador,
                     soc_atual_dict=soc_atual,
@@ -541,6 +570,9 @@ def main():
                     results = solver.solve(modelo.model, tee=False)
                     resultado = modelo.extract_results(results)
 
+                # Atualizar ângulos para a próxima hora (usando os ângulos da solução)
+                angulos_atual = np.array(resultado.ANG)
+
                 resultado.timestamp = datetime.now()
                 resultado.dia_semana = dia_semana
                 resultados_por_snapshot.append(resultado)
@@ -554,19 +586,21 @@ def main():
                     cen_id=cen_id
                 )
 
+                # Atualizar SOC das baterias (operação)
                 for b in barras_bateria:
                     if b < len(resultado.BESS_operation):
                         op = resultado.BESS_operation[b]
                         soc_atual[b] = soc_atual.get(b, 0.5) - op
-                        # Limitar (opcional)
+                        # Limitar entre 0 e capacidade
                         cap = sistema.BATTERY_CAPACITY[b] if isinstance(sistema.BATTERY_CAPACITY, (list, np.ndarray)) else sistema.BATTERY_CAPACITY
                         soc_atual[b] = np.clip(soc_atual[b], 0, cap)
 
                 print(f"   ✓ Concluído. Status: {'sucesso' if resultado.sucesso else 'falha'}")
-                # # Opcional: imprimir valores para depuração
+                # Opcional: imprimir valores de PGWIND e BESS_operation para depuração
                 # print(f"      PGWIND_disponivel (MW): {resultado.PGWIND_disponivel}")
                 # print(f"      PGWIND (MW): {resultado.PGWIND}")
                 # print(f"      CURTAILMENT (MW): {resultado.CURTAILMENT}")
+                # print(f"      BESS_operation (MW): {resultado.BESS_operation}")
 
         # ------------------------------------------------------------------
         # 6. RESUMO

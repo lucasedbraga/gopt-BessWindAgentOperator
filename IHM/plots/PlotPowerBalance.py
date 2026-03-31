@@ -103,7 +103,7 @@ class BarraPowerPlotter:
 
         except Exception as e:
             print(f"❌ Erro ao carregar dados: {e}")
-            self.df_barras = None
+            self.df_barras = None   
 
     def plot_all_barras(self, save_fig=False, output_dir='.'):
         """
@@ -132,12 +132,12 @@ class BarraPowerPlotter:
                 continue
 
             # Criar rótulos para o eixo X
-            x_labels = [f"D{int(row.data_simulacao)} H{int(row.hora_simulacao)}" for _, row in df_bar.iterrows()]
+            x_labels = [f" {int(row.hora_simulacao)}" for _, row in df_bar.iterrows()]
             x_ticks = np.arange(len(df_bar))
             horas = len(df_bar)
 
             # Determinar número de subplots
-            tem_bateria = bar_id in self.barras_com_bateria
+            tem_bateria = False #bar_id in self.barras_com_bateria
             n_subplots = 3 if tem_bateria else 2
 
             # Criar figura com o tamanho desejado (5cm x 10cm)
@@ -164,8 +164,8 @@ class BarraPowerPlotter:
             width = 0.35
             curtail = df_bar['CURTAILMENT_total_result'].values
             deficit = df_bar['PDEF_result'].values
-            ax2.bar(x_ticks - width/2, curtail, width, label='Curtailment', alpha=0.7, color='orange')
-            ax2.bar(x_ticks + width/2, deficit, width, label='Déficit', alpha=0.7, color='red')
+            ax2.bar(x_ticks - width/2, curtail, 2*width, label='Curtailment', alpha=1, color='orange')
+            ax2.bar(x_ticks + width/2, deficit, 2*width, label='Déficit', alpha=0.7, color='red')
             ax2.set_ylabel('Potência (pu)')
             ax2.set_title('Curtailment e Déficit')
             ax2.legend(loc='upper right', fontsize='small')
@@ -198,12 +198,12 @@ class BarraPowerPlotter:
                 ax3.set_title('Operação da Bateria')
 
             # Configurar eixo X (apenas no último subplot)
-            axes[-1].set_xlabel('Período (Dia Hora)')
+            axes[-1].set_xlabel('Hora')
             axes[-1].set_xticks(x_ticks[::max(1, horas//24)])  # Mostra no máximo 8 ticks
             axes[-1].set_xticklabels(x_labels[::max(1, horas//24)], rotation=45, ha='right', fontsize='small')
 
             # Título geral
-            titulo = f'Barra {bar_id} - IEEE 14 Barras'
+            titulo = f'Barra {bar_id} - IEEE 118 Barras'
             plt.suptitle(titulo, fontsize=10, fontweight='bold')
 
             # Ajustar layout para caber no tamanho pequeno
@@ -248,7 +248,7 @@ class BarraPowerPlotter:
         width = 0.2
         ax.bar(x_ticks - 1.5*width, df_hora['PGER_total_result'], width, label='Convencional', color='steelblue')
         ax.bar(x_ticks - 0.5*width, df_hora['PGWIND_total_result'], width, label='Eólica', color='lightgreen')
-        ax.bar(x_ticks + 0.5*width, df_hora['PCURTAILMENT_total_result'], width, label='Curtailment', color='orange')
+        ax.bar(x_ticks + 0.5*width, df_hora['PCURTAILMENT_total_result'], width, label='Curtailment', color='black')
         ax.bar(x_ticks + 1.5*width, df_hora['PDEF_result'], width, label='Déficit', color='red')
         ax.plot(x_ticks, df_hora['PLOAD_cenario'], label='Carga', color='black', marker='o', linewidth=2)
 
@@ -272,7 +272,7 @@ class BarraPowerPlotter:
 
 if __name__ == '__main__':
     # Exemplo de uso
-    plotter = BarraPowerPlotter(db_path='DATA/output/resultados_PL_acoplado.db') 
+    plotter = BarraPowerPlotter(db_path='DATA/output_CUR_oficial/resultados_PL_acoplado.db') 
     # Para um cenário específico: plotter = BarraPowerPlotter(cen_id='20250213143000')
     plotter.plot_all_barras(save_fig=False)
     # plotter.plot_resumo_global(save_fig=False)

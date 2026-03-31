@@ -25,25 +25,40 @@ import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "DATA/input/ieee14_BESS.json"
-DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
-MODELS_DIR = "DATA/output/modelos_especialistas_v4"
+#JSON_PATH = "DATA/input/ieee14_BASE.json"
+JSON_PATH = "DATA/input/ieee118_BASE.json"
+DB_PATH = "DATA/output_CUR_Oficial/RNA_DATA_PL_acoplado.db"
+MODELS_DIR = "DATA/output_CUR_Oficial/modelos_especialistas_v7"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
 
 # Barras com medição (para create_wide_format)
 #BARRAS_COM_MEDICAO = [3]
-BARRAS_COM_MEDICAO = [3, 5, 8]  # IEEE 14
+# BARRAS_COM_MEDICAO = [2, 3, 4, 6, 9, 14] 
+# LINHAS_COM_MEDICAO = ["4-7","4-9","5-6"]
 #BARRAS_COM_MEDICAO = [3, 5, 8, 17]  # IEEE 33
 
+BARRAS_COM_MEDICAO = [8,73,111,59, 116, 90, 80, 54, 42, 15, 49, 56, 60]
+LINHAS_COM_MEDICAO = [
+    "8-5",      # tap = 0.985
+    "26-25",    # tap = 0.96
+    "30-17",    # tap = 0.96
+    "38-37",    # tap = 0.935
+    "63-59",    # tap = 0.96
+    "64-61",    # tap = 0.985
+    "65-66",    # tap = 0.935
+    "81-80",    # tap = 0.935
+    "68-69"     # tap = 0.935
+]
+
 # Parâmetros da geração de cenários (usados apenas se não houver nenhum cenário no banco)
-N_ITERACOES = 1          # Vamos gerar apenas UM cenário
-N_DIAS = 7
+N_ITERACOES = 5          
+N_DIAS = 1
 N_HORAS = 24
 SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5
-CONSIDERAR_PERDAS = True
+CONSIDERAR_PERDAS = False
 SOLVER_NAME = 'highs'
 TOL = 1e-4
 MAX_ITER = 5
@@ -51,7 +66,7 @@ WRITE_LP = False
 
 # Controle de plotagem
 SAVE_FIG = True
-OUTPUT_DIR = "../DATA/output/graficos_comparacao"
+OUTPUT_DIR = "DATA/output_CUR_Oficial/graficos_comparacao"
 
 # Se você já tem um cenário no banco e quer usá-lo, defina o ID aqui.
 # Caso contrário, deixe como None para buscar o último automaticamente.
@@ -85,7 +100,8 @@ def load_data(db_path, cen_id=None):
                PGWIND_disponivel_cenario,
                PGER_CONV_total_result,
                CURTAILMENT_total_result,
-               BESS_operation_result
+               BESS_operation_result,
+               ANG_result
         FROM DBAR_results
     '''
     if cen_id is not None:
@@ -97,11 +113,6 @@ def load_data(db_path, cen_id=None):
     return df
 
 def create_wide_format(df, barras_com_medicao):
-    """
-    Transforma o DataFrame longo em largo:
-    - Uma linha por (cen_id, data_simulacao, hora_simulacao)
-    - Colunas: para cada barra, suas features e targets.
-    """
     df = df.copy()
     df['PLOAD_medido'] = 0.0
     df['PLOAD_estimado'] = 0.0
@@ -111,6 +122,7 @@ def create_wide_format(df, barras_com_medicao):
     
     pivot_cols = [
         'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result',
+        #'ANG_result',
         'PLOAD_medido', 'PLOAD_estimado',
         'CURTAILMENT_total_result', 'BESS_operation_result'
     ]
@@ -123,41 +135,31 @@ def create_wide_format(df, barras_com_medicao):
 
 def prepare_X_y(df_wide, remove_constants=True):
     """
-    Separa features (X) e targets (y) a partir do DataFrame largo.
-    Retorna X e y como DataFrames.
+    Separa features (X) e targets (y).
+    Features: BESS_init, PGWIND, PGER_CONV, ANG, PLOAD_medido.
+    Targets: BESS_operation_result (apenas).
     """
-    feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario', 
-                        'PGER_CONV_total_result', 'PLOAD_medido', 'PLOAD_estimado']
+    feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario',
+                        'PGER_CONV_total_result', 'PLOAD_medido']
+    target_prefixes = ['BESS_operation_result']   # apenas BESS_operation
+
+    feature_cols = [col for col in df_wide.columns if any(col.startswith(p) for p in feature_prefixes)]
+    df_clean = df_wide.dropna(subset=feature_cols)
+    X = df_clean[feature_cols].copy()
+    target_cols = [col for col in df_clean.columns if any(col.startswith(p) for p in target_prefixes)]
+    y = df_clean[target_cols].copy()
+    #y = y.mask(y.abs() < 0.001,0.01)
     
-    all_feature_cols = [col for col in df_wide.columns 
-                        if any(col.startswith(prefix) for prefix in feature_prefixes)]
-    
-    df_clean = df_wide.dropna(subset=all_feature_cols)
-    X = df_clean[all_feature_cols]
-    
-    # Construir targets com base nas features remanescentes
-    target_cols = []
-    for col in X.columns:
-        if '_BAR' not in col:
-            continue
-        base, bar = col.rsplit('_BAR', 1)
-        if base.startswith('BESS_init_cenario'):
-            target_name = f'BESS_operation_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-        elif base.startswith('PGWIND_disponivel_cenario'):
-            target_name = f'CURTAILMENT_total_result_BAR{bar}'
-            if target_name in df_clean.columns:
-                target_cols.append(target_name)
-    
-    target_cols = list(dict.fromkeys(target_cols))
-    
-    if target_cols:
-        y = df_clean[target_cols]
-    else:
-        y = pd.DataFrame(index=df_clean.index)
-    
+    if remove_constants:
+        constant_X = X.columns[X.std() == 0].tolist()
+        if constant_X:
+            X = X.drop(columns=constant_X)
+        constant_y = y.columns[y.std() == 0].tolist()
+        if constant_y:
+            y = y.drop(columns=constant_y)
+    print(f"   Features shape: {X.shape}, Targets shape: {y.shape}")
     return X, y
+
 
 def get_target_names_from_features(feature_names):
     """
@@ -252,13 +254,13 @@ def gerar_cenario_unico():
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         cen_id = f"{timestamp}_00000"
         
-        seed = secrets.randbits(32)
+        seed = (int(time.time() * 1e6)) % 1000
         avaliador = EvaluateFactors(
             sistema=sistema,
             n_dias=N_DIAS,
             n_horas=N_HORAS,
-            carga_incerteza=0.2,
-            vento_variacao=0.1,
+            carga_incerteza=0.05,
+            vento_variacao=0,
             seed=seed
         )
         fatores_carga, fatores_vento = avaliador.gerar_tudo()
@@ -479,6 +481,7 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
         ax.set_title(titulo)
         ax.set_xticks(x)
         ax.set_xticklabels(barras)
+        #ax.set_ylim(-1,1)  # Ajus
         ax.legend()
         ax.grid(True, alpha=0.3)
         
@@ -487,8 +490,7 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
             fname = os.path.join(output_dir, f'{grupo.lower()}_comparison_hora_{hora:02d}.png')
             plt.savefig(fname, dpi=150, bbox_inches='tight')
             print(f"   Gráfico salvo: {fname}")
-        plt.show()
-
+        
 # ========== Função principal ==========
 def main():
     print("=" * 70)
