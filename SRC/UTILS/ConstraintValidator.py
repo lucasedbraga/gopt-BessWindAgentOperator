@@ -17,7 +17,7 @@ import pandas as pd
 
 # ==================== CONFIGURAÇÕES ====================
 DB_PATH = "DATA/output/resultados_PL_acoplado.db"
-JSON_PATH = "DATA/input/3barras_BASE.json"
+JSON_PATH = "DATA/input/ieee14_BASE.json"
 TOL = 1e-4                     # tolerância para verificações
 
 # Se nenhum argumento for passado, use este cen_id (exemplo)

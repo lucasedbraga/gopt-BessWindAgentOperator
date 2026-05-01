@@ -32,7 +32,7 @@ class ElectricConstraints:
         DISCHARGE: Optional[Dict[Tuple[int, int], poi.Variable]] = None,
         battery_list: Optional[List[int]] = None,
         PERDAS_BARRA: Optional[np.ndarray] = None,
-        considerar_perdas: bool = False
+        considerar_perdas: bool = True
     ) -> List[Tuple[int, int, poi.Constraint]]:
         """
         Adiciona restrições de fluxo DC, limites de linha e balanço de potência.
