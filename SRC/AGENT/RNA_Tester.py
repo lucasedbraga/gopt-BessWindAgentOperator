@@ -27,8 +27,8 @@ import matplotlib.pyplot as plt
 # Caminhos
 #JSON_PATH = "DATA/input/ieee14_BASE.json"
 JSON_PATH = "DATA/input/ieee118_BASE.json"
-DB_PATH = "DATA/output_CUR_Oficial/RNA_DATA_PL_acoplado.db"
-MODELS_DIR = "DATA/output_CUR_Oficial/modelos_especialistas_v7"
+DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
+MODELS_DIR = "DATA/output/output_CUR_Oficial_118b/modelos_especialistas_v7_TEST"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
@@ -66,7 +66,7 @@ WRITE_LP = False
 
 # Controle de plotagem
 SAVE_FIG = True
-OUTPUT_DIR = "DATA/output_CUR_Oficial/graficos_comparacao"
+OUTPUT_DIR = "DATA/output/graficos_comparacao"
 
 # Se você já tem um cenário no banco e quer usá-lo, defina o ID aqui.
 # Caso contrário, deixe como None para buscar o último automaticamente.

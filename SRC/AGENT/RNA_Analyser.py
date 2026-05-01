@@ -1,264 +1,288 @@
+#!/usr/bin/env python3
+"""
+graficos_finais.py
+
+Gera:
+  1) Gráfico de erro: Real (OPF) × Previsto (RNA) com uma reta de regressão
+     para cada hora (16, 17, 18) e a linha identidade.
+  2) (Opcional) Gráfico de barras com as principais restrições ativas que
+     causaram curtailment (Tabela X).
+
+Requer que os arquivos previsoes_teste.csv existam em
+  <MODELS_DIR>/hora_16/ , <MODELS_DIR>/hora_17/ , <MODELS_DIR>/hora_18/
+(gerados pelo script de treinamento RNA_especialistas_por_horario_v7.py).
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression
+import os
+import sqlite3   # necessário se quiser consultar o banco para restrições
 
-def smape(y_true, y_pred):
-    """Symmetric Mean Absolute Percentage Error (SMAPE) em porcentagem."""
-    denominator = np.abs(y_true) + np.abs(y_pred)
-    mask = denominator != 0
-    if not mask.any():
-        return 0.0
-    return 100 * np.mean(2 * np.abs(y_true[mask] - y_pred[mask]) / denominator[mask])
+# ==================== CONFIGURAÇÕES ====================
+# Pasta raiz onde estão as subpastas hora_16/, hora_17/, hora_18/
+MODELS_DIR_14 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_14b/modelos_especialistas_v7"
+MODELS_DIR_118 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_118b/modelos_especialistas_v7_TEST"
 
-def hit_rate_mixed(y_true, y_pred, rel_tol=0.05, abs_tol=0.01):
+# Caminho do banco de dados original (usado se você quiser extrair restrições do SQLite)
+DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"          # ajuste se necessário
+
+# Caminho de um CSV com as restrições (mais simples, veja instruções no final)
+RESTRICOES_CSV = "restricoes_curtailment.csv"            # se existir, usa este arquivo
+# ========================================================
+
+
+def plot_windcurtailment(models_dir, horas=(16, 17, 18),
+                         threshold=0.0001, max_points=50):
     """
-    Retorna array booleano indicando acerto por elemento.
+    Para cada hora, gera uma figura com subplots (um por barra de curtailment).
+    Cada subplot compara os valores reais (FPO-CC) e previstos (RNA) daquela barra.
+    O título do subplot identifica a barra (ex.: BAR3) e a hora.
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
-    abs_err = np.abs(y_true - y_pred)
-    nonzero = y_true != 0
-    correct = np.zeros_like(y_true, dtype=bool)
-    if np.any(nonzero):
-        rel_err = abs_err[nonzero] / np.abs(y_true[nonzero])
-        correct[nonzero] = rel_err <= rel_tol
-    zero = ~nonzero
-    if np.any(zero):
-        correct[zero] = abs_err[zero] <= abs_tol
-    n_correct = np.sum(correct)
-    percent = (n_correct / len(correct)) * 100.0 if len(correct) > 0 else 0.0
-    return n_correct, percent
+    for hora in horas:
+        csv_path = os.path.join(models_dir, f"hora_{hora:02d}", "previsoes_teste.csv")
+        if not os.path.exists(csv_path):
+            print(f"Arquivo {csv_path} não encontrado. Pulando hora {hora}.")
+            continue
 
-# ------------------------------
-# 1. Carregar dados
-# ------------------------------
-#arquivo = r"C:\Users\lucas\repositorios\gopt-BessWindAgentOperator\DATA\output\modelos_especialistas_v6\hora_18\previsoes_teste.csv"
-arquivo = r"C:\Users\lucas\repositorios\gopt-BessWindAgentOperator\DATA\output_CUR_Oficial\modelos_especialistas_v7\hora_16\previsoes_teste.csv"
+        df = pd.read_csv(csv_path)
 
-df = pd.read_csv(arquivo)
+        # Identifica todas as colunas reais (targets)
+        col_reais = [c for c in df.columns if '_previsto' not in c]
+        # Monta os pares (real, previsto) que realmente existem
+        pares = [(real, real + '_previsto') for real in col_reais if real + '_previsto' in df.columns]
 
-# ------------------------------
-# 2. Identificar colunas reais e previstas
-# ------------------------------
-colunas_reais = [col for col in df.columns if not col.endswith('_previsto') and col != 'correto']
+        if not pares:
+            print(f"Nenhum par real/previsto encontrado para hora {hora}.")
+            continue
 
-# ------------------------------
-# 3. Filtrar apenas as colunas que estão na ordem desejada (opcional)
-# ------------------------------
-ordem_desejada = [
-    # 'BESS_operation_result_BAR3',
-    # 'BESS_operation_result_BAR14',
-    "CURTAILMENT_total_result_BAR3",
-    "CURTAILMENT_total_result_BAR14",
-    "CURTAILMENT_total_result_BAR8",
-    "CURTAILMENT_total_result_BAR73",
-    "CURTAILMENT_total_result_BAR111",
-    "PLOAD_medido_BAR2",
-    "PLOAD_medido_BAR3",
-    "PLOAD_medido_BAR4",
-    "PLOAD_medido_BAR6",
-    "PLOAD_medido_BAR9",
-    "PLOAD_medido_BAR14",
-    "LIN_usage_result_4-7",
-    "LIN_usage_result_4-9",
-    "LIN_usage_result_5-6"
-]
-colunas_reais = [c for c in colunas_reais if c in ordem_desejada]  # manter apenas as desejadas
+        n_barras = len(pares)
+        ncols = 2
+        nrows = -(-n_barras // ncols)  # ceil division
 
-resultados = []
-for real in colunas_reais:
-    prev = real + '_previsto'
-    if prev not in df.columns:
-        continue
-    y_true = df[real].values
-    y_pred = df[prev].values
+        # # Cria figura com altura proporcional ao número de linhas de subplots
+        # fig, axes = plt.subplots(3, 1, figsize=(4.5, 10),
+        #                          squeeze=False,   # garante que axes seja 2D
+        #                          gridspec_kw={'hspace': 0.3, 'wspace': 0.3})
+        # fig.subplots_adjust(left=0.15, right=0.985, top=0.95, bottom=0.05,
+        #             hspace=0.2, wspace=0.2)   # ajuste hspace/vspace conforme necessário
+        # # Achata o array de eixos para fácil iteração
+        # axes = axes.flatten()
+        rng = np.random.default_rng(seed=42)  # reprodutibilidade
+        indices = rng.choice(len(df), size=200, replace=True)
+        for idx, (real_col, prev_col) in enumerate(pares):
+            #ax = axes[idx]
 
-    # Cálculo das métricas
-    mae = mean_absolute_error(y_true, y_pred)
-    mse = mean_squared_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_true, y_pred)
-    smape_val = smape(y_true, y_pred)
-    corr = np.corrcoef(y_true, y_pred)[0, 1] if len(y_true) > 1 and np.std(y_true) > 0 else np.nan
-    n_acertos, pct_acertos = hit_rate_mixed(y_true, y_pred, rel_tol=0.08, abs_tol=0.009)
+            # Extrai os valores desta barra
+            real = df[real_col].values
+            pred = df[prev_col].values
 
-    resultados.append({
-        'Variável': real,
-        'MAE': mae,
-        'MSE': mse,
-        'RMSE': rmse,
-        'R²': r2,
-        'SMAPE (%)': smape_val,
-        'Correlação': corr,
-        'Acertos (%)': pct_acertos,
-        'Acertos (contagem)': n_acertos,
-        'Total amostras': len(y_true)
-    })
+            # # Filtra onde há curtailment significativo
+            # mask = real > threshold
+            # real_f = real[mask]
+            # pred_f = pred[mask]
 
-df_metricas = pd.DataFrame(resultados)
+            real_f = real[indices]
+            pred_f = pred[indices]
+            # # Ordena pelos valores reais para melhor visualização
+            # order = np.argsort(real_f)
+            # real_f = real_f[order]
+            # pred_f = pred_f[order]
+            # Plota as duas curvas
+            plt.figure(figsize=(6, 4.5))  # tamanho compacto
+            plt.plot(real_f, linestyle='-', linewidth=1.2, alpha=0.9, label='FPO-CC')
+            plt.plot(pred_f, linestyle='--', linewidth=1, alpha=0.7, label='RNA', color='red')
 
-colunas_bess = [col for col in colunas_reais if col.startswith('BESS_operation_result')]
+            # Título com o nome da barra
+            bar_name = real_col.split('_')[-1]  # pega 'BAR3', 'BAR14' etc.
+            plt.title(f'WindCurtailment {bar_name} – Hora {hora:02d}',  fontweight='bold')
+            plt.xlabel('Índice da amostra', fontweight='bold')
+            plt.ylabel('pu (MW)', fontweight='bold')
+            plt.tick_params(axis='both', labelsize=8, width=1.0)
+            plt.legend(frameon=False)
+            plt.grid(alpha=0.3, linewidth=0.8)
+            for spine in plt.gca().spines.values():
+                spine.set_linewidth(0.5)
 
-if colunas_bess:
-    # Inicializar listas para armazenar os vetores reais e previstos
-    y_true_bess = []
-    y_pred_bess = []
-    
-    for real in colunas_bess:
-        prev = real + '_previsto'
-        if prev in df.columns:
-            y_true_bess.extend(df[real].values)
-            y_pred_bess.extend(df[prev].values)
-        else:
-            print(f"Aviso: coluna prevista para {real} não encontrada. Ignorando.")
-    
-    if y_true_bess:
-        y_true_bess = np.array(y_true_bess)
-        y_pred_bess = np.array(y_pred_bess)
+        # # Remove subplots vazios (se houver)
+        # for j in range(idx + 1, len(axes)):
+        #     axes[j].set_visible(False)
+
+
+        # # Título geral da figura
+        # fig.suptitle(f'Sistema IEEE 14', 
+        #              fontsize=14, fontweight='bold',y=0.98)
         
-        # Cálculo do EEE (Euclidean Error Estimate)
-        eee = np.sqrt(np.sum((y_true_bess - y_pred_bess) ** 2)) * 100
-        
-        # Cálculo do EMT (Maximum Relative Error) – evita divisão por zero
-        abs_real = np.abs(y_true_bess)
-        abs_diff = np.abs(y_true_bess - y_pred_bess)
-        # Proteção para real == 0: considera erro relativo = 0 se real=0 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            rel_errors = np.where(abs_real != 0, abs_diff / abs_real, 0)
-            
-        
-        emt = np.max(rel_errors) * 100        
-        # Cálculo do EAF (Absolute Error Factor)
-        eaf = np.max(abs_diff) * 100        
-        # IGE = soma
-        ige = eee + emt + eaf
-        
-        # Exibir resultados
-        print("\n=== MÉTRICAS COMPOSTAS PARA BESS_operation_result ===\n")
-        print(f"EEE : {eee:.6f}")
-        print(f"EMT : {emt:.6f}")
-        print(f"EA  : {eaf:.6f}")
-        print(f"IGE = EEE + EMT + EAF          : {ige:.6f}")
-        
-        # Opcional: salvar em um DataFrame separado
-        df_metricas_bess = pd.DataFrame({
-            'Métrica': ['EEE', 'EMT', 'EAF', 'IGE'],
-            'Valor': [eee, emt, eaf, ige]
-        })
-        print("\nTabela resumo:")
-        print(df_metricas_bess.to_string(index=False))
-        
+        # Ajuste fino dos espaçamentos (compatível com suptitle)
+            # Margens internas mínimas
+            plt.subplots_adjust(left=0.15, right=0.95, top=0.93, bottom=0.12)
+            # Salvamento com borda extra quase nula
+            plot_path = os.path.join(models_dir, 'residuos.png')
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight', pad_inches=0.02)
+            plt.show()
+
+            plot_path = os.path.join(models_dir, f'comparacao_barras_hora_{hora:02d}.png')
+            #fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.show()
+            print(f"Gráfico da hora {hora:02d} (por barra) salvo em: {plot_path}")
+
+def plot_residuos(models_dir, horas=(16, 17, 18)):
+    """
+    Plota os resíduos (Real - Previsto) ao longo das amostras de teste,
+    com uma linha horizontal tracejada no erro médio de cada hora.
+    """
+        # Cores e estilos para cada hora
+    cores = {16: '#1f77b4', 17: '#ff7f0e', 18: '#2ca02c'}
+
+    fig, ax = plt.subplots(figsize=(6, 4.5))  # tamanho compacto
+
+    for hora in horas:
+        csv_path = os.path.join(models_dir, f"hora_{hora:02d}", "previsoes_teste.csv")
+        if not os.path.exists(csv_path):
+            print(f"Arquivo {csv_path} não encontrado. Pulando hora {hora}.")
+            continue
+
+        df = pd.read_csv(csv_path)
+
+        # Todas as colunas de curtailment (real e previsto)
+        col_real = [c for c in df.columns if '_previsto' not in c]
+        col_prev = [c for c in df.columns if '_previsto' in c]
+
+        # Achata para considerar todas as barras
+        real = df[col_real].values.ravel()
+        pred = df[col_prev].values.ravel()
+
+        real= real[:200]
+        pred= pred[:200]
+
+        erro = abs(real) - abs(pred)
+
+        # Linha de resíduos
+        cor = cores.get(hora, '#333333')
+        ax.plot(range(len(erro)), erro, alpha=0.8, linewidth=1.2,
+                label=f'Hora {hora:02d}', color=cor)
+
+        # # Linha do erro médio (tracejada, mesma cor)
+        # erro_medio = erro.mean()
+        # ax.axhline(y=erro_medio, linestyle='--', linewidth=1.0,
+        #            color=cor, alpha=0.6, label=f'Erro médio Hora {hora:02d}')
+    # Rótulos e título
+    ax.set_xlabel('Amostra de teste', fontweight='bold')
+    ax.set_ylabel('Erro Absoluto (pu)', fontweight='bold')
+    # ax.set_title('Erro (FPO-CC - RNA) para hora : Sistema IEEE 14', fontweight='bold')
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3, linewidth=0.8)
+
+    # Bordas finas
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+
+    # Margens internas mínimas
+    fig.subplots_adjust(left=0.15, right=0.95, top=0.93, bottom=0.12)
+    # Salvamento com borda extra quase nula
+    plot_path = os.path.join(models_dir, 'residuos.png')
+    fig.savefig(plot_path, dpi=300, bbox_inches='tight', pad_inches=0.02)
+    plt.show()
+    print(f"Gráfico de resíduos salvo em: {plot_path}")
+
+
+def plot_restricoes_curtailment(models_dir, db_path=None, csv_path=None):
+    """
+    Gera o gráfico de barras horizontais com as restrições mais frequentes
+    que causaram curtailment eólico.
+
+    Forma de obter os dados:
+      - Se csv_path for fornecido e existir, carrega de um CSV com colunas:
+            tipo_restricao, elemento, ocorrencias
+      - Senão, se db_path for fornecido, tenta fazer a consulta diretamente no
+        banco SQLite (requer uma tabela RESTRICOES com colunas:
+            cen_id, data_simulacao, tipo_restricao, elemento).
+        A consulta filtra os cenários com CURTAILMENT_total_result > 0 nas horas 16-18.
+      - Se nenhum for fornecido, emite mensagem de instrução.
+    """
+    # Tenta carregar do CSV primeiro
+    if csv_path and os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        if not {'tipo_restricao', 'elemento', 'ocorrencias'}.issubset(df.columns):
+            print("CSV de restrições deve conter colunas: tipo_restricao, elemento, ocorrencias")
+            return
+    elif db_path and os.path.exists(db_path):
+        # Consulta SQL dinâmica
+        conn = sqlite3.connect(db_path)
+        query = '''
+            SELECT r.tipo_restricao, r.elemento, COUNT(*) as ocorrencias
+            FROM RESTRICOES r
+            INNER JOIN DBAR_results d
+              ON r.cen_id = d.cen_id AND r.data_simulacao = d.data_simulacao
+            WHERE d.CURTAILMENT_total_result > 0 AND d.hora_simulacao IN (16,17,18)
+            GROUP BY r.tipo_restricao, r.elemento
+            ORDER BY ocorrencias DESC
+        '''
+        try:
+            df = pd.read_sql_query(query, conn)
+        except Exception as e:
+            print(f"Erro ao consultar banco: {e}")
+            conn.close()
+            return
+        conn.close()
     else:
-        print("Nenhum dado de BESS encontrado para cálculo das métricas compostas.")
-else:
-    print("Nenhuma coluna de BESS_operation_result encontrada no DataFrame.")
+        print("Nenhuma fonte de dados de restrições fornecida.")
+        print("Crie um arquivo 'restricoes_curtailment.csv' com as colunas:")
+        print("  tipo_restricao, elemento, ocorrencias")
+        print("Ou forneça um banco SQLite com a tabela RESTRICOES.")
+        return
 
-# ------------------------------
-# 4. Ordenar conforme a ordem desejada (já filtramos, apenas reordenar)
-# ------------------------------
-df_metricas['Variável'] = pd.Categorical(df_metricas['Variável'], categories=ordem_desejada, ordered=True)
-df_metricas = df_metricas.sort_values('Variável').reset_index(drop=True)
+    if df.empty:
+        print("Nenhuma restrição encontrada.")
+        return
 
-# ------------------------------
-# 5. Exibir tabela ordenada
-# ------------------------------
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', None)
-pd.set_option('display.float_format', '{:.6f}'.format)
+    # Ordena e seleciona as 10 principais para o gráfico
+    df = df.sort_values('ocorrencias', ascending=False).head(10)
+    rotulos = df.apply(lambda row: f"{row['tipo_restricao']} {row['elemento']}", axis=1)
 
-print("\n=== MÉTRICAS DE ACURÁCIA DA RNA (tolerância mista: 5% rel. ou 0,01 abs.) ===\n")
-print(df_metricas.to_string(index=False))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(rotulos, df['ocorrencias'], color='darkorange')
+    ax.set_xlabel('Número de ocorrências')
+    ax.set_title('Principais restrições ativas que causaram curtailment (horas 16-18)')
+    ax.invert_yaxis()
+    ax.grid(axis='x', linestyle='--', alpha=0.6)
+    fig.tight_layout()
 
-# Desvio padrão das variáveis reais (somente as que estão na tabela)
-desvios = df[colunas_reais].std().sort_values()
-print("\nDesvio padrão das variáveis reais:")
-print(desvios)
+    plot_path = os.path.join(models_dir, 'restricoes_curtailment.png')
+    fig.savefig(plot_path, dpi=150)
+    plt.show()
+    print(f"Gráfico de restrições salvo em: {plot_path}")
 
-# RMSE normalizado (coeficiente de variação do erro) – evita divisão por zero
-df_metricas['RMSE/σ'] = df_metricas.apply(
-    lambda row: row['RMSE'] / desvios[row['Variável']] if desvios[row['Variável']] > 0 else np.nan,
-    axis=1
-)
-print("\nRMSE / σ:")
-print(df_metricas[['Variável', 'RMSE', 'RMSE/σ']])
+    # Salva também a tabela
+    tabela_path = os.path.join(models_dir, 'tabela_restricoes_curtailment.csv')
+    df.to_csv(tabela_path, index=False)
+    print(f"Tabela salva em: {tabela_path}")
 
-# ------------------------------
-# 6. Gerar gráficos de barras para cada métrica (opcional: incluir contagem)
-# ------------------------------
-metricas_plot = ['MAE', 'MSE', 'RMSE', 'R²', 'SMAPE (%)', 'Correlação', 'Acertos (%)']
-x = df_metricas['Variável'].astype(str)
 
-for metrica in metricas_plot:
-    plt.figure(figsize=(12, 6))
-    bars = plt.bar(x, df_metricas[metrica], color='skyblue', edgecolor='black')
-    plt.title(f'{metrica} por Variável', fontsize=14)
-    plt.xlabel('Variável')
-    plt.ylabel(metrica)
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
+if __name__ == '__main__':
+    os.makedirs(MODELS_DIR_14, exist_ok=True)
+    os.makedirs(MODELS_DIR_118, exist_ok=True)
 
-    # Adicionar valores sobre as barras
-    for bar in bars:
-        height = bar.get_height()
-        if not np.isnan(height):
-            plt.text(bar.get_x() + bar.get_width()/2., height,
-                     f'{height:.4f}', ha='center', va='bottom', fontsize=8)
+    # print("=" * 60)
+    # print("1) Gráfico de erro: Real × Previsto com retas por hora")
+    plot_windcurtailment(MODELS_DIR_118)
 
-    plt.tight_layout()
-    # Salva o gráfico sem exibir (opcional: comente a linha abaixo para visualizar)
-    plt.savefig(f'grafico_{metrica.replace(" ", "_").replace("²", "2").replace("%", "pct")}.png', dpi=150)
-    plt.close()  # fecha a figura para não acumular memória
-    print(f"Gráfico de {metrica} salvo como PNG.")
+    # print("\n" + "=" * 60)
+    # print("2) Gráfico de resíduos (erro médio por hora)")
+    #plot_residuos(MODELS_DIR_118)
 
-# Gráfico adicional da contagem de acertos
-plt.figure(figsize=(12, 6))
-bars = plt.bar(x, df_metricas['Acertos (contagem)'], color='lightgreen', edgecolor='black')
-plt.title('Contagem de Acertos por Variável', fontsize=14)
-plt.xlabel('Variável')
-plt.ylabel('Número de acertos')
-plt.xticks(rotation=45, ha='right')
-plt.grid(axis='y', linestyle='--', alpha=0.7)
-for bar in bars:
-    height = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2., height,
-             f'{int(height)}', ha='center', va='bottom', fontsize=8)
-plt.tight_layout()
-plt.savefig('grafico_Acertos_contagem.png', dpi=150)
-plt.close()
-print("Gráfico de contagem de acertos salvo como PNG.")
+    # print("\n" + "=" * 60)
+    # print("2) Gráfico de resíduos (erro médio por hora)")
+    # plot_residuos(MODELS_DIR_118)
 
-print("\nTodos os gráficos foram gerados e salvos.")
+    # print("\n" + "=" * 60)
+    # print("3) Tabela/Gráfico de restrições de curtailment")
+    # Tenta usar o CSV se existir; senão tenta o banco SQLite
+    # plot_restricoes_curtailment(
+    #     MODELS_DIR,
+    #     db_path=DB_PATH,
+    #     csv_path=RESTRICOES_CSV
+    # )
 
-# ------------------------------
-# 7. Gráficos de linha: Real vs Previsto para cada variável
-# ------------------------------
-print("\nGerando gráficos de linha Real vs Previsto para cada variável...")
-
-for real in colunas_reais:
-    prev = real + '_previsto'
-    if prev not in df.columns:
-        print(f"  Aviso: coluna prevista para {real} não encontrada, ignorando.")
-        continue
-
-    y_true = df[real].values
-    y_pred = df[prev].values
-    indices = range(len(y_true))  # número da amostra
-
-    plt.figure(figsize=(12, 6))
-    plt.plot(indices, y_true, label='OPF', color='blue', linewidth=1.5)
-    plt.plot(indices, y_pred, label='RNA', color='orange', linestyle='--', linewidth=1.5)
-    plt.title(f'CURTAILMENT - BAR {real[-3:]} (18h)', fontsize=14)
-    plt.xlabel('Número da amostra')
-    plt.ylabel('Valor')
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.7)
-    plt.tight_layout()
-
-    # Salva o gráfico
-    nome_arquivo = f'grafico_linha_{real}.png'
-    plt.savefig(nome_arquivo, dpi=150)
-    plt.close()
-    print(f"  Gráfico salvo: {nome_arquivo}")
-
-print("Todos os gráficos de linha foram gerados e salvos.")
+    print("\nProcesso concluído.")

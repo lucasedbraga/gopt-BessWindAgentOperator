@@ -25,8 +25,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 # ==================== CONFIGURAÇÕES ====================
-DB_PATH = 'DATA/output_CUR_Oficial/RNA_DATA_PL_acoplado.db'
-MODELS_DIR = 'DATA/output_CUR_Oficial/modelos_especialistas_v7'   # diretório de saída (nova versão)
+DB_PATH = 'DATA/output/output_CUR_Oficial_118b/RNA_DATA_PL_acoplado.db'
+MODELS_DIR = 'DATA/output/modelos_especialistas_v7'   # diretório de saída (nova versão)
 TEST_SIZE = 0.2
 MAX_ATTEMPTS = 1000               # número máximo de tentativas por hora
 TARGET_ACCURACY = 90.0            # acurácia mínima desejada (%)
@@ -300,7 +300,7 @@ def train_until_threshold(X, y, hour, models_dir):
     best_seed = None
 
     for attempt in range(MAX_ATTEMPTS):
-        # Gera uma semente pseudoaleatória baseada no tempo e na tentativa
+        # Gera uma semente
         seed = (int(time.time() * 1e6) + attempt) % 1000
         mlp_params_with_seed = mlp_params.copy()
         mlp_params_with_seed['random_state'] = seed
