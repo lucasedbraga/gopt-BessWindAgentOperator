@@ -44,7 +44,8 @@ class EvaluateFactors:
         
         self.carga_incerteza = carga_incerteza
         
-        vento_arquivo = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
+        #vento_arquivo = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
+        vento_arquivo = r"/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/SRC/DB/getters/intermittent-renewables-production-france.csv"
         self.vento_arquivo = vento_arquivo
         self.vento_variacao = vento_variacao
         self.seed = seed
