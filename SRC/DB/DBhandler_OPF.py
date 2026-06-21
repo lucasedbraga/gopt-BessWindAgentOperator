@@ -39,6 +39,7 @@ class OPF_DBHandler:
             fator_vento_cenario REAL,
             PLOAD_cenario TEXT,                       
             PGER_result TEXT,
+            QGER_result REAL,
             PGWIND_disponivel_cenario TEXT,             
             PGWIND_result TEXT,
             CURTAILMENT_result TEXT,
@@ -65,7 +66,8 @@ class OPF_DBHandler:
             BAR_id INTEGER,
             BAR_tipo TEXT,
             PLOAD_cenario REAL,                       
-            PGER_CONV_total_result REAL,
+            PGER_UTE_result REAL,
+            QGER_UTE_result REAL,
             PLOSS_result REAL,
             PDEF_result REAL,                       
             PGWIND_disponivel_cenario REAL,
@@ -93,8 +95,11 @@ class OPF_DBHandler:
             GER_tipo TEXT,
             Custo_cenario REAL,
             PGER_result REAL,
-            PMAX_result REAL,
-            P_MIN_result REAL,
+            PGER_MAX_cenario REAL,
+            PGER_MIN_cenario REAL,
+            QGER_result REAL,
+            QGER_MAX_cenario REAL,
+            QGER_MIN_cenario REAL,          
             PGWIND_disponivel_cenario REAL,
             PGWIND_result REAL,
             PCWIND_result REAL,
@@ -143,7 +148,7 @@ class OPF_DBHandler:
         def safe_value(x):
             return 0.0 if abs(x) < TOL else float(x)
 
-        n_eol = sistema.NGER_EOL
+        n_eol = sistema.NGER_GWD
         gwd_pgwind = [0.0] * n_eol
         gwd_curtail = [0.0] * n_eol
         gwd_disponivel = [0.0] * n_eol
@@ -153,7 +158,6 @@ class OPF_DBHandler:
                 gwd_pgwind[pos] = safe_value(resultado.PGWIND[pos] * SB)
             if hasattr(resultado, 'CURTAILMENT') and pos < len(resultado.CURTAILMENT):
                 gwd_curtail[pos] = safe_value(resultado.CURTAILMENT[pos] * SB)
-            # CORREÇÃO: usar a disponibilidade real do snapshot
             if hasattr(resultado, 'PGWIND_disponivel') and pos < len(resultado.PGWIND_disponivel):
                 gwd_disponivel[pos] = safe_value(resultado.PGWIND_disponivel[pos] * SB)
             else:
@@ -164,7 +168,8 @@ class OPF_DBHandler:
                 return default
             return json.dumps([safe_value(x) for x in arr])
 
-        pg_result_json = json_from_array(resultado.PGER)
+        PGER_result_json = json_from_array(resultado.PGER)
+        QGER_result_json = json_from_array(resultado.QGER)
         pgwind_result_json = json_from_array(resultado.PGWIND)
         curtailment_result_json = json_from_array(resultado.CURTAILMENT)
         BESS_soc_init_json = json_from_array(resultado.SOC_init)
@@ -174,9 +179,9 @@ class OPF_DBHandler:
         ang_result_json = json_from_array(resultado.ANG)
         fluxlin_json = json_from_array(resultado.FLUXO_LIN)
 
-        pgwind_disponivel_total = [0.0] * (sistema.NGER_CONV + n_eol)
+        pgwind_disponivel_total = [0.0] * (sistema.NGER_UTE + n_eol)
         for pos in range(n_eol):
-            pgwind_disponivel_total[sistema.NGER_CONV + pos] = gwd_disponivel[pos]
+            pgwind_disponivel_total[sistema.NGER_UTE + pos] = gwd_disponivel[pos]
         pgwind_disponivel_json = json.dumps([safe_value(x) for x in pgwind_disponivel_total])
 
         # Usa INSERT OR REPLACE para evitar violação de unique constraint
@@ -194,6 +199,7 @@ class OPF_DBHandler:
             fator_vento_cenario,
             PLOAD_cenario,
             PGER_result,
+            QGER_result,
             PGWIND_disponivel_cenario,
             PGWIND_result,
             CURTAILMENT_result,
@@ -203,7 +209,7 @@ class OPF_DBHandler:
             V_result,
             ANG_result,
             FluxLIN_result
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             cen_id,
             timestamp,
@@ -216,7 +222,8 @@ class OPF_DBHandler:
             getattr(sistema, 'json_file_path', 'unknown'),
             0,
             0,
-            pg_result_json,
+            PGER_result_json,
+            QGER_result_json,
             pgwind_disponivel_json,
             pgwind_result_json,
             curtailment_result_json,
@@ -233,20 +240,22 @@ class OPF_DBHandler:
             barra_id = sistema.indice_para_barra[i]
             tipo_barra = next((b["tipo"] for b in sistema.barras if b["ID_Barra"] == barra_id), "PQ")
 
-            geracao_conv = 0.0
-            geracao_eol = 0.0
-            curtailment = 0.0
-            disponivel_eol = 0.0
+            PGER_UTE = 0.0
+            QGER_UTE = 0.0
+            GER_GWD = 0.0
+            CURTAILMENT = 0.0
+            DISP_GWD = 0.0
 
-            for g in range(sistema.NGER_CONV):
+            for g in range(sistema.NGER_UTE):
                 if sistema.BARPG_CONV[g] == i and g < len(resultado.PGER):
-                    geracao_conv += safe_value(resultado.PGER[g] * SB)
+                    PGER_UTE += safe_value(resultado.PGER[g] * SB)
+                    QGER_UTE += safe_value(resultado.QGER[g]* SB)
 
             for pos in range(n_eol):
                 if sistema.BARPG_EOL[pos] == i:
-                    geracao_eol += gwd_pgwind[pos]
-                    curtailment += gwd_curtail[pos]
-                    disponivel_eol += gwd_disponivel[pos]
+                    GER_GWD += gwd_pgwind[pos]
+                    CURTAILMENT += gwd_curtail[pos]
+                    DISP_GWD += gwd_disponivel[pos]
 
             perdas = 0.0
             for e in range(sistema.NLIN):
@@ -264,7 +273,6 @@ class OPF_DBHandler:
             bess_op = safe_value(resultado.BESS_operation[i]) if i < len(resultado.BESS_operation) else 0.0
             bess_atual = safe_value(resultado.SOC_atual[i]) if i < len(resultado.SOC_atual) else 0.0
 
-            # --- CORREÇÃO: usar a carga real do snapshot (com fator) ---
             load_mw = safe_value(resultado.PLOAD[i] * SB) if i < len(resultado.PLOAD) else safe_value(sistema.PLOAD[i] * SB)
 
             cursor.execute('''
@@ -277,7 +285,8 @@ class OPF_DBHandler:
                 BAR_id,
                 BAR_tipo,
                 PLOAD_cenario,
-                PGER_CONV_total_result,
+                PGER_UTE_result,
+                QGER_UTE_result,
                 PLOSS_result,
                 PDEF_result,
                 PGWIND_disponivel_cenario,
@@ -287,7 +296,7 @@ class OPF_DBHandler:
                 BESS_operation_result,
                 BESS_soc_atual_result,
                 V_result, ANG_result
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 cen_id,
                 timestamp,
@@ -297,12 +306,13 @@ class OPF_DBHandler:
                 barra_id,
                 tipo_barra,
                 load_mw, 
-                safe_value(geracao_conv),
+                safe_value(PGER_UTE),
+                safe_value(QGER_UTE),
                 perdas,
                 deficit,
-                safe_value(disponivel_eol),
-                safe_value(geracao_eol),
-                safe_value(curtailment),
+                safe_value(DISP_GWD),
+                safe_value(GER_GWD),
+                safe_value(CURTAILMENT),
                 bess_init,
                 bess_op,
                 bess_atual,
@@ -311,11 +321,11 @@ class OPF_DBHandler:
             ))
 
         # DGER_results e DLIN_results (mantidos iguais)
-        for g in range(sistema.NGER_CONV):
+        for g in range(sistema.NGER_UTE):
             barra_idx = sistema.BARPG_CONV[g]
             barra_id = sistema.indice_para_barra[barra_idx]
-            tipo = sistema.GER_TIPOS_CONV[g] if g < len(sistema.GER_TIPOS_CONV) else "CONV"
-            custo = safe_value(sistema.CPG_CONV[g]) if g < len(sistema.CPG_CONV) else 0.0
+            tipo = sistema.GER_TIPO[g] if g < len(sistema.GER_TIPO) else "CONV"
+            custo = safe_value(sistema.CustoPGER_UTE[g]) if g < len(sistema.CustoPGER_UTE) else 0.0
 
             cursor.execute('''
             INSERT INTO DGER_results (
@@ -329,12 +339,15 @@ class OPF_DBHandler:
                 GER_tipo,
                 custo_cenario,
                 PGER_result,
-                PMAX_result,
-                P_MIN_result,
+                PGER_MAX_cenario,
+                PGER_MIN_cenario,
+                QGER_result,
+                QGER_MAX_cenario,
+                QGER_MIN_cenario,          
                 PGWIND_disponivel_cenario,
                 PGWIND_result,
                 PCWIND_result
-            ) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 cen_id,
                 timestamp,
@@ -346,8 +359,11 @@ class OPF_DBHandler:
                 tipo,
                 custo,
                 safe_value(resultado.PGER[g] * SB) if g < len(resultado.PGER) else 0.0,
-                safe_value(sistema.PGMAX_CONV[g] * SB) if g < len(sistema.PGMAX_CONV) else 0.0,
-                safe_value(sistema.PGMIN_CONV[g] * SB) if g < len(sistema.PGMIN_CONV) else 0.0,
+                safe_value(sistema.PGER_MAX_UTE[g] * SB) if g < len(sistema.PGER_MAX_UTE) else 0.0,
+                safe_value(sistema.PGER_MIN_UTE[g] * SB) if g < len(sistema.PGER_MIN_UTE) else 0.0,
+                safe_value(resultado.QGER[g] * SB) if g < len(resultado.QGER) else 0.0,
+                safe_value(sistema.QGER_MAX_UTE[g] * SB) if g < len(sistema.QGER_MAX_UTE) else 0.0,
+                safe_value(sistema.QGER_MIN_UTE[g] * SB) if g < len(sistema.QGER_MIN_UTE) else 0.0,
                 0.0, 0.0, 0.0
             ))
 
@@ -366,19 +382,29 @@ class OPF_DBHandler:
                 BAR_id,
                 GER_tipo,
                 custo_cenario,
-                PGER_result, PMAX_result, P_MIN_result,
-                PGWIND_disponivel_cenario, PGWIND_result, PCWIND_result
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+                PGER_result,
+                PGER_MAX_cenario,
+                PGER_MIN_cenario,
+                QGER_result,
+                QGER_MAX_cenario,
+                QGER_MIN_cenario,          
+                PGWIND_disponivel_cenario,
+                PGWIND_result,
+                PCWIND_result
+            ) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',  (
                 cen_id,
                 timestamp,
                 dia,
                 dia_semana,
                 int(hora),
-                sistema.NGER_CONV + pos, barra_id, tipo,
+                sistema.NGER_UTE + pos, barra_id, tipo,
                 0.0,
                 0.0,
-                safe_value(sistema.PGMAX_EOL_EFETIVO[pos] * SB) if pos < len(sistema.PGMAX_EOL_EFETIVO) else 0.0,
+                safe_value(sistema.PGWD_MAX_EFETIVO[pos] * SB) if pos < len(sistema.PGWD_MAX_EFETIVO) else 0.0,
+                0.0,
+                0.0,
+                0.0,
                 0.0,
                 safe_value(gwd_disponivel[pos]),
                 safe_value(gwd_pgwind[pos]),

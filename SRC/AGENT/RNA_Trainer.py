@@ -25,7 +25,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 # ==================== CONFIGURAÇÕES ====================
-DB_PATH = 'DATA/output/output_CUR_Oficial_118b/RNA_DATA_PL_acoplado.db'
+DB_PATH = 'DATA/output/RNA_DATA_ACOPF.db'
 MODELS_DIR = 'DATA/output/modelos_especialistas_v7'   # diretório de saída (nova versão)
 TEST_SIZE = 0.2
 MAX_ATTEMPTS = 1000               # número máximo de tentativas por hora
@@ -51,15 +51,15 @@ TOLERANCE_ABS = 0.01              # tolerância absoluta para valores próximos 
 
 BARRAS_COM_MEDICAO = [59, 116, 90, 80, 54, 42, 15, 49, 56, 60]
 LINHAS_COM_MEDICAO = [
-    "8-5",      # tap = 0.985
-    "26-25",    # tap = 0.96
-    "30-17",    # tap = 0.96
-    "38-37",    # tap = 0.935
-    "63-59",    # tap = 0.96
-    "64-61",    # tap = 0.985
-    "65-66",    # tap = 0.935
-    "81-80",    # tap = 0.935
-    "68-69"     # tap = 0.935
+    "8-5",      
+    "26-25",    
+    "30-17",    
+    "38-37",    
+    "63-59",    
+    "64-61",   
+    "65-66",    
+    "81-80",    
+    "68-69"
 ]
 
 MIN_SAMPLES_PER_GROUP = 100        # número mínimo de amostras por hora para treinar o modelo
@@ -76,12 +76,15 @@ def load_data(db_path):
                dia_semana,
                BAR_id,
                PLOAD_cenario,
-               BESS_init_cenario,
-               PGWIND_disponivel_cenario,
-               PGER_CONV_total_result,
+               PGER_UTE_result,
+               PGWIND_disponivel_cenario,               
                CURTAILMENT_total_result,
+               V_result,
+               ANG_result,
+               QLOAD_cenario,            
+               BESS_init_cenario,
                BESS_operation_result,
-               ANG_result
+
         FROM DBAR_results
         WHERE hora_simulacao IN (16,17,18)
     '''
@@ -188,7 +191,7 @@ def create_wide_format(df, barras_com_medicao):
     df.loc[~mask_medido, 'PLOAD_estimado'] = df.loc[~mask_medido, 'PLOAD_cenario']
 
     pivot_cols = [
-        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result',
+        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_UTE_result',
         'ANG_result','PLOAD_medido', 'PLOAD_estimado',
         'CURTAILMENT_total_result', 'BESS_operation_result'
     ]
@@ -207,7 +210,7 @@ def prepare_X_y(df_wide, remove_constants=True):
     """
     # Prefixos das features originais
     feature_prefixes = ['PGWIND_disponivel_cenario',
-                        'PGER_CONV_total_result', 'PLOAD_medido']
+                        'PGER_UTE_result', 'PLOAD_medido']
 
     # Identificar colunas de medição adicionais (que contêm os prefixos das novas features)
     # Elas serão todas as colunas que não começam com os prefixos acima e que não são targets

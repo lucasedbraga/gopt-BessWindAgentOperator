@@ -68,7 +68,7 @@ class BarraPowerPlotter:
                     BAR_id,
                     BAR_tipo,
                     PLOAD_cenario,
-                    PGER_CONV_total_result,
+                    PGER_UTE_result,
                     PGWIND_total_result,
                     CURTAILMENT_total_result,
                     BESS_operation_result,
@@ -92,7 +92,7 @@ class BarraPowerPlotter:
             self.barras_com_bateria = set(bess_active[bess_active].index)
 
             # Converter colunas para numérico (algumas podem vir como string)
-            numeric_cols = ['PGER_CONV_total_result', 'PGWIND_total_result', 'CURTAILMENT_total_result',
+            numeric_cols = ['PGER_UTE_result', 'PGWIND_total_result', 'CURTAILMENT_total_result',
                             'BESS_operation_result', 'BESS_soc_atual_result', 'PLOSS_result', 'PDEF_result']
             for col in numeric_cols:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -126,7 +126,7 @@ class BarraPowerPlotter:
             df_bar = self.df_barras[self.df_barras['BAR_id'] == bar_id].copy()
             df_bar.sort_values(['data_simulacao', 'hora_simulacao'], inplace=True)
 
-            if (df_bar['PGER_CONV_total_result'].sum() == 0 and
+            if (df_bar['PGER_UTE_result'].sum() == 0 and
                 df_bar['PGWIND_total_result'].sum() == 0 and
                 df_bar['BESS_soc_atual_result'].sum() == 0):
                 continue
@@ -150,7 +150,7 @@ class BarraPowerPlotter:
 
             # 1. Gráfico de geração empilhada
             ax1 = axes[0]
-            convencional = df_bar['PGER_CONV_total_result'].values
+            convencional = df_bar['PGER_UTE_result'].values
             eolica = df_bar['PGWIND_total_result'].values
             ax1.bar(x_ticks, convencional, label='Convencional', alpha=0.7, color='steelblue')
             ax1.bar(x_ticks, eolica, bottom=convencional, label='Eólica', alpha=0.7, color='lightgreen')

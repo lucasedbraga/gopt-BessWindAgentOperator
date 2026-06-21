@@ -22,7 +22,7 @@ class EvaluateFactors:
                  seed=None):
         """
         Args:
-            sistema: objeto com atributos NBAR, NGER_EOL, etc.
+            sistema: objeto com atributos NBAR, NGER_GWD, etc.
             n_dias: número de dias
             n_horas: horas por dia (máximo 24)
             carga_incerteza: amplitude da variação uniforme em torno do perfil (ex: 0.2 = ±10%)
@@ -34,17 +34,23 @@ class EvaluateFactors:
         self.n_horas = n_horas
         self.T = n_dias * n_horas
         
-        # Perfil horário normalizado (pico = 1.0)
-        self.carga_perfil_horario = np.array([
-            0.65, 0.62, 0.60, 0.60, 0.62, 0.70,  # 0-5h (madrugada)
-            0.75, 0.70, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
-            0.92, 0.90, 0.88, 0.90, 0.92, 0.95,  # 12-17h (tarde)
-            1.00, 0.98, 0.95, 0.90, 0.75, 0.55   # 18-23h (noite/pico)
-        ])
+        if (n_dias == 1
+            and n_horas ==1):
+                    self.carga_perfil_horario = np.array([1])
+        else:
+            # Perfil horário normalizado (pico = 1.0)
+            self.carga_perfil_horario = np.array([
+                0.65, 0.62, 0.60, 0.60, 0.62, 0.70,  # 0-5h (madrugada)
+                0.75, 0.70, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
+                0.92, 0.90, 0.88, 0.90, 0.92, 0.95,  # 12-17h (tarde)
+                1.00, 0.98, 0.95, 0.90, 0.75, 0.55   # 18-23h (noite/pico)
+            ])
+
+
         
         self.carga_incerteza = carga_incerteza
         
-        #vento_arquivo = r"C:\\Users\\lucas\\repositorios\\gopt-BessWindAgentOperator\\SRC\\DB\\getters\\intermittent-renewables-production-france.csv"
+        #vento_arquivo = r"C:\Users\LucasBraga\Documents\repos\ufjf\gopt-BessWindAgentOperator\SRC\DB\getters\intermittent-renewables-production-france.csv"
         vento_arquivo = r"/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/SRC/DB/getters/intermittent-renewables-production-france.csv"
         self.vento_arquivo = vento_arquivo
         self.vento_variacao = vento_variacao
@@ -152,14 +158,14 @@ class EvaluateFactors:
     def gerar_fatores_vento(self, use_weibull=False, weibull_shape=None, weibull_scale=None,
                         cut_in=3.0, rated_speed=12.0, cut_out=25.0, power_curve=None):
         """
-        Retorna array de fatores de vento com shape (n_dias, n_horas, NGER_EOL).
+        Retorna array de fatores de vento com shape (n_dias, n_horas, NGER_GWD).
         Se use_weibull=True, gera velocidades Weibull e aplica curva de potência.
         Caso contrário, usa o método original (sorteio dos históricos por hora).
 
         Parâmetros:
         - use_weibull: bool, se True usa Weibull + curva de potência, senão usa histórico.
-        - weibull_shape: float ou array (n_horas, NGER_EOL) - parâmetro de forma (k)
-        - weibull_scale: float ou array (n_horas, NGER_EOL) - parâmetro de escala (λ) em m/s
+        - weibull_shape: float ou array (n_horas, NGER_GWD) - parâmetro de forma (k)
+        - weibull_scale: float ou array (n_horas, NGER_GWD) - parâmetro de escala (λ) em m/s
         - cut_in: float ou array, velocidade de partida (m/s) - padrão 3.0
         - rated_speed: float ou array, velocidade nominal (m/s) - padrão 12.0
         - cut_out: float ou array, velocidade de corte (m/s) - padrão 25.0
@@ -174,7 +180,7 @@ class EvaluateFactors:
             n_dias = self.n_dias
             n_horas = self.n_horas
             T = n_dias * n_horas
-            NGER_EOL = self.sistema.NGER_EOL
+            NGER_GWD = self.sistema.NGER_GWD
 
             fatores_base = np.zeros((n_dias, n_horas))
             for h in range(n_horas):
@@ -185,22 +191,22 @@ class EvaluateFactors:
                 fatores_base[:, h] = np.array(lista)[indices]
 
             fatores_base = fatores_base.ravel()
-            fatores_base = np.tile(fatores_base.reshape(-1, 1), (1, NGER_EOL))
+            fatores_base = np.tile(fatores_base.reshape(-1, 1), (1, NGER_GWD))
 
             delta = np.random.uniform(-self.vento_variacao/2, self.vento_variacao/2,
-                                    size=(T, NGER_EOL))
+                                    size=(T, NGER_GWD))
             fatores = fatores_base * (1 + delta)
             fatores = np.maximum(fatores, 0.0)
             fatores = np.minimum(fatores, 1.0)   # garantir limite superior
 
-            fatores = fatores.reshape(n_dias, n_horas, NGER_EOL)
+            fatores = fatores.reshape(n_dias, n_horas, NGER_GWD)
             return fatores
 
         # --- Nova implementação: Weibull + curva de potência ---
         np.random.seed(self.seed)
         n_dias = self.n_dias
         n_horas = self.n_horas
-        NGER_EOL = self.sistema.NGER_EOL
+        NGER_GWD = self.sistema.NGER_GWD
         T = n_dias * n_horas
 
         # Definir parâmetros Weibull
@@ -209,23 +215,23 @@ class EvaluateFactors:
         if weibull_scale is None:
             weibull_scale = 10.0     # m/s, valor típico
 
-        # Expandir para (n_horas, NGER_EOL) se escalar
+        # Expandir para (n_horas, NGER_GWD) se escalar
         if np.isscalar(weibull_shape):
-            weibull_shape = np.full((n_horas, NGER_EOL), weibull_shape)
+            weibull_shape = np.full((n_horas, NGER_GWD), weibull_shape)
         if np.isscalar(weibull_scale):
-            weibull_scale = np.full((n_horas, NGER_EOL), weibull_scale)
+            weibull_scale = np.full((n_horas, NGER_GWD), weibull_scale)
 
         weibull_shape = np.asarray(weibull_shape)
         weibull_scale = np.asarray(weibull_scale)
-        if weibull_shape.shape != (n_horas, NGER_EOL):
-            raise ValueError(f"weibull_shape deve ter formato ({n_horas}, {NGER_EOL})")
-        if weibull_scale.shape != (n_horas, NGER_EOL):
-            raise ValueError(f"weibull_scale deve ter formato ({n_horas}, {NGER_EOL})")
+        if weibull_shape.shape != (n_horas, NGER_GWD):
+            raise ValueError(f"weibull_shape deve ter formato ({n_horas}, {NGER_GWD})")
+        if weibull_scale.shape != (n_horas, NGER_GWD):
+            raise ValueError(f"weibull_scale deve ter formato ({n_horas}, {NGER_GWD})")
 
         # Gerar velocidades do vento (m/s) via transformada inversa da Weibull
-        u = np.random.uniform(0, 1, size=(n_dias, n_horas, NGER_EOL))
-        shape_exp = np.tile(weibull_shape.reshape(1, n_horas, NGER_EOL), (n_dias, 1, 1))
-        scale_exp = np.tile(weibull_scale.reshape(1, n_horas, NGER_EOL), (n_dias, 1, 1))
+        u = np.random.uniform(0, 1, size=(n_dias, n_horas, NGER_GWD))
+        shape_exp = np.tile(weibull_shape.reshape(1, n_horas, NGER_GWD), (n_dias, 1, 1))
+        scale_exp = np.tile(weibull_scale.reshape(1, n_horas, NGER_GWD), (n_dias, 1, 1))
         wind_speed = scale_exp * (-np.log(1 - u)) ** (1 / shape_exp)   # velocidades em m/s
 
         # Converter velocidades em fatores de capacidade (entre 0 e 1)
@@ -236,15 +242,15 @@ class EvaluateFactors:
             # Curva padrão: linear entre cut_in e rated_speed
             # Expandir parâmetros da curva se fornecidos como escalares
             if np.isscalar(cut_in):
-                cut_in = np.full((n_horas, NGER_EOL), cut_in)
+                cut_in = np.full((n_horas, NGER_GWD), cut_in)
             if np.isscalar(rated_speed):
-                rated_speed = np.full((n_horas, NGER_EOL), rated_speed)
+                rated_speed = np.full((n_horas, NGER_GWD), rated_speed)
             if np.isscalar(cut_out):
-                cut_out = np.full((n_horas, NGER_EOL), cut_out)
+                cut_out = np.full((n_horas, NGER_GWD), cut_out)
 
-            cut_in_exp = np.tile(cut_in.reshape(1, n_horas, NGER_EOL), (n_dias, 1, 1))
-            rated_exp = np.tile(rated_speed.reshape(1, n_horas, NGER_EOL), (n_dias, 1, 1))
-            cut_out_exp = np.tile(cut_out.reshape(1, n_horas, NGER_EOL), (n_dias, 1, 1))
+            cut_in_exp = np.tile(cut_in.reshape(1, n_horas, NGER_GWD), (n_dias, 1, 1))
+            rated_exp = np.tile(rated_speed.reshape(1, n_horas, NGER_GWD), (n_dias, 1, 1))
+            cut_out_exp = np.tile(cut_out.reshape(1, n_horas, NGER_GWD), (n_dias, 1, 1))
 
             fatores = np.zeros_like(wind_speed)
             # Região 1: abaixo de cut_in -> 0
@@ -259,7 +265,7 @@ class EvaluateFactors:
         # Aplicar variação adicional (opcional)
         if self.vento_variacao > 0:
             delta = np.random.uniform(-self.vento_variacao/2, self.vento_variacao/2,
-                                    size=(n_dias, n_horas, NGER_EOL))
+                                    size=(n_dias, n_horas, NGER_GWD))
             fatores = fatores * (1 + delta)
         
         # Garantir limites finais [0,1]
@@ -270,7 +276,7 @@ class EvaluateFactors:
         """
         Retorna tuple (fatores_carga, fatores_vento) com shapes:
         carga: (n_dias, n_horas, NBAR)
-        vento: (n_dias, n_horas, NGER_EOL)
+        vento: (n_dias, n_horas, NGER_GWD)
         """
         fatores_carga = self.gerar_fatores_carga()
         fatores_vento = self.gerar_fatores_vento(use_weibull=False)  # use weibull por padrão

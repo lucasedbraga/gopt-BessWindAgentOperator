@@ -19,7 +19,7 @@ class ThermalGeneratorConstraints:
     def add_constraints(
         model: pyo.ConcreteModel,
         T: int,
-        NGER_CONV: int,
+        NGER_UTE: int,
         PGER: Dict[Tuple[int, int], pyo.Var],
         QGER: Optional[Dict[Tuple[int, int], pyo.Var]] = None,
         pgmin_conv: List[float] = None,
@@ -40,7 +40,7 @@ class ThermalGeneratorConstraints:
             Modelo Pyomo.
         T : int
             Número de períodos.
-        NGER_CONV : int
+        NGER_UTE : int
             Número de geradores convencionais.
         PGER : dict
             Variáveis de potência ativa (pyo.Var), chave (t, g).
@@ -57,17 +57,17 @@ class ThermalGeneratorConstraints:
         SB : float
             Potência base (MVA).
         """
-        if NGER_CONV == 0:
+        if NGER_UTE == 0:
             return
 
         if pgmin_conv is None:
-            pgmin_conv = [0.0] * NGER_CONV
+            pgmin_conv = [0.0] * NGER_UTE
         if pgmax_conv is None:
-            pgmax_conv = [1.0] * NGER_CONV
+            pgmax_conv = [1.0] * NGER_UTE
 
         # Limites de potência ativa
         for t in range(T):
-            for g in range(NGER_CONV):
+            for g in range(NGER_UTE):
                 setattr(model, f"gen_active_lb_{t}_{g}",
                         pyo.Constraint(expr=PGER[t, g] >= pgmin_conv[g]))
                 setattr(model, f"gen_active_ub_{t}_{g}",
@@ -76,28 +76,28 @@ class ThermalGeneratorConstraints:
         # Limites de potência reativa
         if QGER is not None and qgmin_conv is not None and qgmax_conv is not None:
             for t in range(T):
-                for g in range(NGER_CONV):
+                for g in range(NGER_UTE):
                     setattr(model, f"gen_reactive_lb_{t}_{g}",
                             pyo.Constraint(expr=QGER[t, g] >= qgmin_conv[g]))
                     setattr(model, f"gen_reactive_ub_{t}_{g}",
                             pyo.Constraint(expr=QGER[t, g] <= qgmax_conv[g]))
 
-        # Restrições de rampa
-        if ramp_up_mw is not None and ramp_down_mw is not None and pger_inicial_conv is not None:
-            ramp_up_pu = [r / SB for r in ramp_up_mw]
-            ramp_down_pu = [r / SB for r in ramp_down_mw]
+        # # Restrições de rampa
+        # if ramp_up_mw is not None and ramp_down_mw is not None and pger_inicial_conv is not None:
+        #     ramp_up_pu = [r / SB for r in ramp_up_mw]
+        #     ramp_down_pu = [r / SB for r in ramp_down_mw]
 
-            # Primeiro período
-            for g in range(NGER_CONV):
-                setattr(model, f"first_ramp_up_{g}",
-                        pyo.Constraint(expr=PGER[0, g] <= pger_inicial_conv[g] + ramp_up_pu[g]))
-                setattr(model, f"first_ramp_down_{g}",
-                        pyo.Constraint(expr=PGER[0, g] >= pger_inicial_conv[g] - ramp_down_pu[g]))
+        #     # Primeiro período
+        #     for g in range(NGER_UTE):
+        #         setattr(model, f"first_ramp_up_{g}",
+        #                 pyo.Constraint(expr=PGER[0, g] <= pger_inicial_conv[g] + ramp_up_pu[g]))
+        #         setattr(model, f"first_ramp_down_{g}",
+        #                 pyo.Constraint(expr=PGER[0, g] >= pger_inicial_conv[g] - ramp_down_pu[g]))
 
-            # Demais períodos
-            for t in range(1, T):
-                for g in range(NGER_CONV):
-                    setattr(model, f"ramp_up_{t}_{g}",
-                            pyo.Constraint(expr=PGER[t, g] <= PGER[t-1, g] + ramp_up_pu[g]))
-                    setattr(model, f"ramp_down_{t}_{g}",
-                            pyo.Constraint(expr=PGER[t, g] >= PGER[t-1, g] - ramp_down_pu[g]))
+        #     # Demais períodos
+        #     for t in range(1, T):
+        #         for g in range(NGER_UTE):
+        #             setattr(model, f"ramp_up_{t}_{g}",
+        #                     pyo.Constraint(expr=PGER[t, g] <= PGER[t-1, g] + ramp_up_pu[g]))
+        #             setattr(model, f"ramp_down_{t}_{g}",
+        #                     pyo.Constraint(expr=PGER[t, g] >= PGER[t-1, g] - ramp_down_pu[g]))

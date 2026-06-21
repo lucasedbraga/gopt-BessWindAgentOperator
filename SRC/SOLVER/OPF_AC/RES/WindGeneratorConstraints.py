@@ -17,7 +17,7 @@ class WindGeneratorConstraints:
     def add_constraints(
         model: pyo.ConcreteModel,
         T: int,
-        NGER_EOL: int,
+        NGER_GWD: int,
         PGWIND: Dict,
         CURTAILMENT: Dict,
         PGWIND_AVAIL: Union[np.ndarray, Dict],
@@ -31,7 +31,7 @@ class WindGeneratorConstraints:
             Modelo Pyomo.
         T : int
             Número de períodos.
-        NGER_EOL : int
+        NGER_GWD : int
             Número de geradores eólicos.
         PGWIND : dict
             Dicionário de variáveis Pyomo (chave (t, w)) → pyo.Var.
@@ -39,9 +39,9 @@ class WindGeneratorConstraints:
             Dicionário de variáveis Pyomo (chave (t, w)) → pyo.Var.
         PGWIND_AVAIL : np.ndarray ou dict
             Disponibilidade eólica (pu) para cada (t, w).
-            Se array, shape (T, NGER_EOL); se dict, chave (t, w).
+            Se array, shape (T, NGER_GWD); se dict, chave (t, w).
         """
-        if NGER_EOL == 0:
+        if NGER_GWD == 0:
             return
 
         # Função de acesso à disponibilidade
@@ -53,7 +53,7 @@ class WindGeneratorConstraints:
                 return PGWIND_AVAIL.get((t, w), 0.0)
 
         for t in range(T):
-            for w in range(NGER_EOL):
+            for w in range(NGER_GWD):
                 avail = get_avail(t, w)
                 setattr(
                     model,

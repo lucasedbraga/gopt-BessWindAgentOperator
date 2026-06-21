@@ -22,11 +22,11 @@ import sqlite3   # necessário se quiser consultar o banco para restrições
 
 # ==================== CONFIGURAÇÕES ====================
 # Pasta raiz onde estão as subpastas hora_16/, hora_17/, hora_18/
-MODELS_DIR_14 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_14b/modelos_especialistas_v7"
-MODELS_DIR_118 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_118b/modelos_especialistas_v7_TEST"
-
+# MODELS_DIR_14 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_14b/modelos_especialistas_v7"
+# MODELS_DIR_118 = "/home/lucasedbraga/repositorios/ufjf/gopt-BessWindAgentOperator/DATA/output/output_CUR_Oficial_118b/modelos_especialistas_v7_TEST"
+MODELS_DIR_118 = r"C:\Users\LucasBraga\Documents\repos\ufjf\gopt-BessWindAgentOperator\DATA\output\modelos_especialistas_v7"
 # Caminho do banco de dados original (usado se você quiser extrair restrições do SQLite)
-DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"          # ajuste se necessário
+DB_PATH = "DATA/output/RNA_DATA_ACOPF.db"          # ajuste se necessário
 
 # Caminho de um CSV com as restrições (mais simples, veja instruções no final)
 RESTRICOES_CSV = "restricoes_curtailment.csv"            # se existir, usa este arquivo
@@ -261,24 +261,24 @@ def plot_restricoes_curtailment(models_dir, db_path=None, csv_path=None):
 
 
 if __name__ == '__main__':
-    os.makedirs(MODELS_DIR_14, exist_ok=True)
+    #os.makedirs(MODELS_DIR_14, exist_ok=True)
     os.makedirs(MODELS_DIR_118, exist_ok=True)
 
     # print("=" * 60)
     # print("1) Gráfico de erro: Real × Previsto com retas por hora")
     plot_windcurtailment(MODELS_DIR_118)
 
-    # print("\n" + "=" * 60)
-    # print("2) Gráfico de resíduos (erro médio por hora)")
-    #plot_residuos(MODELS_DIR_118)
+    print("\n" + "=" * 60)
+    print("2) Gráfico de resíduos (erro médio por hora)")
+    plot_residuos(MODELS_DIR_118)
 
-    # print("\n" + "=" * 60)
-    # print("2) Gráfico de resíduos (erro médio por hora)")
-    # plot_residuos(MODELS_DIR_118)
+    print("\n" + "=" * 60)
+    print("2) Gráfico de resíduos (erro médio por hora)")
+    plot_residuos(MODELS_DIR_118)
 
-    # print("\n" + "=" * 60)
-    # print("3) Tabela/Gráfico de restrições de curtailment")
-    # Tenta usar o CSV se existir; senão tenta o banco SQLite
+    print("\n" + "=" * 60)
+    print("3) Tabela/Gráfico de restrições de curtailment")
+    # #Tenta usar o CSV se existir; senão tenta o banco SQLite
     # plot_restricoes_curtailment(
     #     MODELS_DIR,
     #     db_path=DB_PATH,

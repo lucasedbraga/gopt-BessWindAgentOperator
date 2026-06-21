@@ -3,7 +3,7 @@
 """
 Script principal para OPF com RNAs especialistas (versão v6).
 - Utiliza modelos treinados por hora (16,17,18) que preveem a operação da bateria.
-- Features: BESS_init_cenario, PGWIND_disponivel_cenario, PGER_CONV_total_result,
+- Features: BESS_init_cenario, PGWIND_disponivel_cenario, PGER_UTE_result,
             ANG_result, PLOAD_medido.
 - O curtailment não é previsto; assume-se PGWIND = PGWIND_disponivel.
 """
@@ -92,11 +92,11 @@ class DC_OPF_RNA_Model:
 
         # === CONJUNTOS ===
         m.BUSES = Set(initialize=range(s.NBAR))
-        m.CONV_GENERATORS = Set(initialize=range(s.NGER_CONV))
+        m.CONV_GENERATORS = Set(initialize=range(s.NGER_UTE))
         m.LINES = Set(initialize=range(s.NLIN))
 
-        if s.NGER_EOL > 0:
-            m.WIND_GENERATORS = Set(initialize=range(s.NGER_EOL))
+        if s.NGER_GWD > 0:
+            m.WIND_GENERATORS = Set(initialize=range(s.NGER_GWD))
         else:
             m.WIND_GENERATORS = Set(initialize=[])
 
@@ -210,14 +210,14 @@ class DC_OPF_RNA_Model:
         s = self.sistema
 
         # Custo dos geradores convencionais
-        if hasattr(s, 'CPG') and len(s.CPG) == s.NGER_CONV:
+        if hasattr(s, 'CPG') and len(s.CPG) == s.NGER_UTE:
             custo_conv = sum(m.PGER[g] * s.CPG[g] for g in m.CONV_GENERATORS)
         else:
             custo_conv = sum(m.PGER[g] * 10.0 for g in m.CONV_GENERATORS)
 
         # Penalidade por déficit
-        if hasattr(s, 'CPG_DEFICIT'):
-            custo_def = sum(m.DEFICIT[b] * s.CPG_DEFICIT for b in m.BUSES)
+        if hasattr(s, 'Custo_DEFICT'):
+            custo_def = sum(m.DEFICIT[b] * s.Custo_DEFICT for b in m.BUSES)
         else:
             custo_def = sum(m.DEFICIT[b] * 1000.0 for b in m.BUSES)
 
@@ -289,10 +289,10 @@ class DC_OPF_RNA_Model:
             return OPFResult(
                 sucesso=False,
                 PLOAD=[0.0]*s.NBAR,
-                PGER=[0.0]*s.NGER_CONV,
-                PGWIND_disponivel=[0.0]*s.NGER_EOL,
-                PGWIND=[0.0]*s.NGER_EOL,
-                CURTAILMENT=[0.0]*s.NGER_EOL,
+                PGER=[0.0]*s.NGER_UTE,
+                PGWIND_disponivel=[0.0]*s.NGER_GWD,
+                PGWIND=[0.0]*s.NGER_GWD,
+                CURTAILMENT=[0.0]*s.NGER_GWD,
                 SOC_init=[0.0]*s.NBAR,
                 BESS_operation=[0.0]*s.NBAR,
                 SOC_atual=[0.0]*s.NBAR,
@@ -377,8 +377,8 @@ def build_feature_dataframe(sistema, soc_atual_dict, pgwind_disponivel_barra_mw,
         data[f'BESS_init_cenario_BAR{bar_id}'] = soc
         # PGWIND_disponivel_cenario (MW)
         data[f'PGWIND_disponivel_cenario_BAR{bar_id}'] = pgwind_disponivel_barra_mw[barra]
-        # PGER_CONV_total_result (inicialmente zero)
-        data[f'PGER_CONV_total_result_BAR{bar_id}'] = 0.0
+        # PGER_UTE_result (inicialmente zero)
+        data[f'PGER_UTE_result_BAR{bar_id}'] = 0.0
         # ANG_result (radianos)
         data[f'ANG_result_BAR{bar_id}'] = angulos_barra_rad[barra]
         # PLOAD_medido (MW)
@@ -409,8 +409,8 @@ def main():
         print(f"   ✓ Potência base: {sistema.SB:.1f} MVA")
         print(f"   ✓ Barras: {sistema.NBAR}")
         print(f"   ✓ Linhas: {sistema.NLIN}")
-        print(f"   ✓ Geradores: {sistema.NGER_CONV} CONVENCIONAIS")
-        print(f"   ✓ Geradores eólicos (GWD): {sistema.NGER_EOL} ")
+        print(f"   ✓ Geradores: {sistema.NGER_UTE} CONVENCIONAIS")
+        print(f"   ✓ Geradores eólicos (GWD): {sistema.NGER_GWD} ")
         print(f"   ✓ Baterias: {len(getattr(sistema, 'BATTERIES', []))}")
         print(f"   ✓ Carga total base: {np.sum(sistema.PLOAD):.3f} pu ({np.sum(sistema.PLOAD)*sistema.SB:.1f} MW)")
 
@@ -470,9 +470,9 @@ def main():
         # ------------------------------------------------------------------
         # 4. PREPARAR ESTRUTURAS DE APOIO
         # ------------------------------------------------------------------
-        barra_eol_por_gerador = getattr(sistema, 'bus_wind', [0]*sistema.NGER_EOL)
+        barra_eol_por_gerador = getattr(sistema, 'bus_wind', [0]*sistema.NGER_GWD)
         barras_bateria = sistema.BATTERIES if hasattr(sistema, 'BATTERIES') else []
-        pmax_eol = getattr(sistema, 'PMAX_EOL', [1.0]*sistema.NGER_EOL)
+        pmax_eol = getattr(sistema, 'PMAX_EOL', [1.0]*sistema.NGER_GWD)
 
         db_handler = OPF_DBHandler('DATA/output/RNA_resultados_OPF_Agentic.db')
         db_handler.create_tables()
@@ -525,11 +525,11 @@ def main():
                 f_c = fator_carga[dia, hora]
 
                 # Disponibilidade eólica por gerador (MW)
-                pgwind_disp_por_gerador = [pmax_eol[g] * f_v * sistema.SB for g in range(sistema.NGER_EOL)]
+                pgwind_disp_por_gerador = [pmax_eol[g] * f_v * sistema.SB for g in range(sistema.NGER_GWD)]
 
                 # Disponibilidade eólica por barra (MW)
                 disp_eolica_barra_mw = np.zeros(sistema.NBAR)
-                for g in range(sistema.NGER_EOL):
+                for g in range(sistema.NGER_GWD):
                     barra = barra_eol_por_gerador[g]
                     disp_eolica_barra_mw[barra] += pgwind_disp_por_gerador[g]
 

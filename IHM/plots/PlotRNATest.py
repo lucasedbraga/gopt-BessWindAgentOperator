@@ -97,7 +97,7 @@ def load_data(db_path, cen_id=None):
                PLOAD_cenario,
                BESS_init_cenario,
                PGWIND_disponivel_cenario,
-               PGER_CONV_total_result,
+               PGER_UTE_result,
                CURTAILMENT_total_result,
                BESS_operation_result
         FROM DBAR_results
@@ -124,7 +124,7 @@ def create_wide_format(df, barras_com_medicao):
     df.loc[~mask_medido, 'PLOAD_estimado'] = df.loc[~mask_medido, 'PLOAD_cenario']
     
     pivot_cols = [
-        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result',
+        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_UTE_result',
         'PLOAD_medido', 'PLOAD_estimado',
         'CURTAILMENT_total_result', 'BESS_operation_result'
     ]
@@ -139,12 +139,12 @@ def prepare_X_y(df_wide, remove_constants=True):
     """
     Separa features (X) e targets (y) a partir do DataFrame largo.
     X contém: BESS_init_cenario_BAR*, PGWIND_disponivel_cenario_BAR*,
-              PGER_CONV_total_result_BAR*, PLOAD_medido_BAR*
+              PGER_UTE_result_BAR*, PLOAD_medido_BAR*
     y contém: BESS_operation_result_BAR*, CURTAILMENT_total_result_BAR*, PLOAD_estimado_BAR*
     Remove linhas com NaN nas features.
     """
     feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario',
-                        'PGER_CONV_total_result', 'PLOAD_medido']
+                        'PGER_UTE_result', 'PLOAD_medido']
     target_prefixes = ['BESS_operation_result', 'CURTAILMENT_total_result', 'PLOAD_estimado']
 
     feature_cols = [col for col in df_wide.columns if any(col.startswith(p) for p in feature_prefixes)]

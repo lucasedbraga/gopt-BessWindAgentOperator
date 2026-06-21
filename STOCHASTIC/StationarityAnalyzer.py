@@ -490,7 +490,7 @@ class RNADataAnalyzer:
         - save_dir: diretório para salvar as figuras (se None, exibe na tela)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGER_CONV_total_result', 'PGWIND_disponivel_cenario',
+            variables = ['PLOAD_cenario', 'PGER_UTE_result', 'PGWIND_disponivel_cenario',
                         'CURTAILMENT_total_result',
                       ]
         
@@ -580,7 +580,7 @@ class RNADataAnalyzer:
         - save_dir: diretório para salvar as figuras (se None, exibe na tela)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGER_CONV_total_result', 'PGWIND_disponivel_cenario',
+            variables = ['PLOAD_cenario', 'PGER_UTE_result', 'PGWIND_disponivel_cenario',
                         'CURTAILMENT_total_result',
                         ]
         

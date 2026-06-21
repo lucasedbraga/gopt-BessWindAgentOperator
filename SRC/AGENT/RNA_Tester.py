@@ -27,8 +27,8 @@ import matplotlib.pyplot as plt
 # Caminhos
 #JSON_PATH = "DATA/input/ieee14_BASE.json"
 JSON_PATH = "DATA/input/ieee118_BASE.json"
-DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
-MODELS_DIR = "DATA/output/output_CUR_Oficial_118b/modelos_especialistas_v7_TEST"
+DB_PATH = "DATA/output/RNA_DATA_ACOPF.db"
+MODELS_DIR = "DATA/output/modelos_especialistas_v7"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
@@ -41,15 +41,15 @@ HORAS_INTERESSE = [16, 17, 18]
 
 BARRAS_COM_MEDICAO = [8,73,111,59, 116, 90, 80, 54, 42, 15, 49, 56, 60]
 LINHAS_COM_MEDICAO = [
-    "8-5",      # tap = 0.985
-    "26-25",    # tap = 0.96
-    "30-17",    # tap = 0.96
-    "38-37",    # tap = 0.935
-    "63-59",    # tap = 0.96
-    "64-61",    # tap = 0.985
-    "65-66",    # tap = 0.935
-    "81-80",    # tap = 0.935
-    "68-69"     # tap = 0.935
+    "8-5",      
+    "26-25",    
+    "30-17",    
+    "38-37",    
+    "63-59",    
+    "64-61",    
+    "65-66",    
+    "81-80",    
+    "68-69"     
 ]
 
 # Parâmetros da geração de cenários (usados apenas se não houver nenhum cenário no banco)
@@ -98,7 +98,7 @@ def load_data(db_path, cen_id=None):
                PLOAD_cenario,
                BESS_init_cenario,
                PGWIND_disponivel_cenario,
-               PGER_CONV_total_result,
+               PGER_UTE_result,
                CURTAILMENT_total_result,
                BESS_operation_result,
                ANG_result
@@ -121,7 +121,7 @@ def create_wide_format(df, barras_com_medicao):
     df.loc[~mask_medido, 'PLOAD_estimado'] = df.loc[~mask_medido, 'PLOAD_cenario']
     
     pivot_cols = [
-        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result',
+        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_UTE_result',
         #'ANG_result',
         'PLOAD_medido', 'PLOAD_estimado',
         'CURTAILMENT_total_result', 'BESS_operation_result'
@@ -140,7 +140,7 @@ def prepare_X_y(df_wide, remove_constants=True):
     Targets: BESS_operation_result (apenas).
     """
     feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario',
-                        'PGER_CONV_total_result', 'PLOAD_medido']
+                        'PGER_UTE_result', 'PLOAD_medido']
     target_prefixes = ['BESS_operation_result']   # apenas BESS_operation
 
     feature_cols = [col for col in df_wide.columns if any(col.startswith(p) for p in feature_prefixes)]

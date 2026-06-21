@@ -67,7 +67,7 @@ class MultiDayOPFResult:
     mensagem_global: str = ""
 
 @dataclass
-class TimeCoupledOPFSnapshotResult:
+class OPF_SnapshotResult:
     """Resultado de um único instante (hora) da simulação multi-período."""
     dia: int
     hora: int
@@ -79,8 +79,10 @@ class TimeCoupledOPFSnapshotResult:
 
 
     PLOAD: List[float] = field(default_factory=list)
+    QLOAD: List[float] = field(default_factory=list)
     # Geração térmica (lista por gerador)
     PGER: List[float] = field(default_factory=list)
+    QGER: List[float] = field(default_factory=list)
 
     # Geração eólica e corte (listas por gerador eólico)
     PGWIND_disponivel: List[float] = field(default_factory=list)  # disponível no período
@@ -99,6 +101,7 @@ class TimeCoupledOPFSnapshotResult:
     V: List[float] = field(default_factory=list)
     ANG: List[float] = field(default_factory=list)
     FLUXO_LIN: List[float] = field(default_factory=list)
+    REATIVO_LIN: List[float] = field(default_factory=list)
 
     # Custos e perdas
     CUSTO: List[float] = field(default_factory=list)
@@ -111,8 +114,8 @@ class TimeCoupledOPFSnapshotResult:
     tempo_execucao: float = 0.0
 
 @dataclass
-class TimeCoupledOPFResult:
+class TimeCoupled_OPF_Result:
     """Conjunto de snapshots para toda a simulação multi-período."""
-    snapshots: List[TimeCoupledOPFSnapshotResult] = field(default_factory=list)
+    snapshots: List[OPF_SnapshotResult] = field(default_factory=list)
     sucesso_global: bool = True
     mensagem_global: str = ""

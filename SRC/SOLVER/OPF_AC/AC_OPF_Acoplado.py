@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from SOLVER.OPF_AC.RES.BatteryConstraints import BatteryConstraints
 from SOLVER.OPF_AC.RES.ThermalGeneratorConstraints import ThermalGeneratorConstraints
 from SOLVER.OPF_AC.RES.WindGeneratorConstraints import WindGeneratorConstraints
-from SOLVER.OPF_AC.RES.EletricConstraints import ACElectricConstraints
+from SOLVER.OPF_AC.RES.BalanceConstraints import ACElectricConstraints
 from DB.DBmodel_OPF import TimeCoupledOPFResult, TimeCoupledOPFSnapshotResult
 
 
@@ -129,22 +129,22 @@ class TimeCoupledOPFModel:
         else:
             self.QLOAD = np.zeros_like(self.PLOAD)
 
-        if s.NGER_EOL == 0:
+        if s.NGER_GWD == 0:
             self.PGWIND_AVAIL = np.zeros((T, 0))
         else:
             if fator_vento is None:
-                fv = np.ones((T, s.NGER_EOL))
+                fv = np.ones((T, s.NGER_GWD))
             else:
                 fv = np.asarray(fator_vento)
                 if fv.ndim == 3:
-                    fv = fv.reshape((T, s.NGER_EOL))
+                    fv = fv.reshape((T, s.NGER_GWD))
                 elif fv.ndim == 2:
                     if fv.shape[0] == self.n_dias and fv.shape[1] == self.n_horas:
-                        fv = np.repeat(fv.reshape((T, 1)), s.NGER_EOL, axis=1)
+                        fv = np.repeat(fv.reshape((T, 1)), s.NGER_GWD, axis=1)
                 elif fv.ndim == 1:
                     if fv.size == T:
-                        fv = fv[:, np.newaxis] * np.ones((1, s.NGER_EOL))
-            self.PGWIND_AVAIL = s.PGMAX_EOL_ORIGINAL[np.newaxis, :] * fv
+                        fv = fv[:, np.newaxis] * np.ones((1, s.NGER_GWD))
+            self.PGWIND_AVAIL = s.PGWD_MAX__ORIGINAL[np.newaxis, :] * fv
 
     def _process_soc(self, soc_inicial, soc_final):
         s = self.sistema
@@ -218,7 +218,7 @@ class TimeCoupledOPFModel:
     def _create_thermal_vars(self):
         s = self.sistema
         for t in range(self.horizon_time):
-            for g in range(s.NGER_CONV):
+            for g in range(s.NGER_UTE):
                 p_var = pyo.Var(bounds=(s.PGMIN_CONV[g], s.PGMAX_CONV[g]), initialize=0.0)
                 q_min = s.QGMIN_CONV[g] if hasattr(s, 'QGMIN_CONV') else -0.5 * s.PGMAX_CONV[g]
                 q_max = s.QGMAX_CONV[g] if hasattr(s, 'QGMAX_CONV') else 0.5 * s.PGMAX_CONV[g]
@@ -230,10 +230,10 @@ class TimeCoupledOPFModel:
 
     def _create_wind_vars(self):
         s = self.sistema
-        if s.NGER_EOL == 0:
+        if s.NGER_GWD == 0:
             return
         for t in range(self.horizon_time):
-            for w in range(s.NGER_EOL):
+            for w in range(s.NGER_GWD):
                 avail = self.PGWIND_AVAIL[t, w]
                 p_var = pyo.Var(bounds=(0, avail), initialize=0.0)
                 c_var = pyo.Var(bounds=(0, avail), initialize=0.0)
@@ -281,9 +281,9 @@ class TimeCoupledOPFModel:
         T = self.horizon_time
 
         # 1. Térmicas
-        if s.NGER_CONV > 0:
+        if s.NGER_UTE > 0:
             ThermalGeneratorConstraints.add_constraints(
-                model=self.model, T=T, NGER_CONV=s.NGER_CONV,
+                model=self.model, T=T, NGER_UTE=s.NGER_UTE,
                 PGER=self.PGER, QGER=self.QGER,
                 pgmin_conv=s.PGMIN_CONV, pgmax_conv=s.PGMAX_CONV,
                 qgmin_conv=s.QGMIN_CONV if hasattr(s, 'QGMIN_CONV') else None,
@@ -305,21 +305,21 @@ class TimeCoupledOPFModel:
             )
 
         # 3. Eólicas
-        if s.NGER_EOL > 0:
+        if s.NGER_GWD > 0:
             WindGeneratorConstraints.add_constraints(
-                model=self.model, T=T, NGER_EOL=s.NGER_EOL,
+                model=self.model, T=T, NGER_GWD=s.NGER_GWD,
                 PGWIND=self.PGWIND, CURTAILMENT=self.CURTAILMENT,
                 PGWIND_AVAIL=self.PGWIND_AVAIL
             )
 
         # 4. Rede AC (coordenadas polares)
-        wind_gen_to_bar = getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [0]*s.NGER_EOL))
+        wind_gen_to_bar = getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [0]*s.NGER_GWD))
         ACElectricConstraints.add_constraints(
             model=self.model, sistema=s, T=T,
             G=self.G, B=self.B,
             V=self.V, ANG=self.ANG,
             PGER=self.PGER, QGER=self.QGER,
-            PGWIND=self.PGWIND if s.NGER_EOL > 0 else None,
+            PGWIND=self.PGWIND if s.NGER_GWD > 0 else None,
             conv_gen_to_bar=s.BARPG_CONV,
             wind_gen_to_bar=wind_gen_to_bar,
             PLOAD=self.PLOAD, QLOAD=self.QLOAD,
@@ -351,24 +351,24 @@ class TimeCoupledOPFModel:
         expr = 0.0
 
         # 1. Custo dos geradores térmicos
-        if hasattr(s, 'CPG_CONV'):
+        if hasattr(s, 'CustoPGER_UTE'):
             for t in range(T):
-                for g in range(s.NGER_CONV):
-                    expr += float(s.CPG_CONV[g]) * self.PGER[t, g]
+                for g in range(s.NGER_UTE):
+                    expr += float(s.CustoPGER_UTE[g]) * self.PGER[t, g]
 
         # 2. Penalidade por corte eólico
-        if (hasattr(s, 'CPG_CURTAILMENT') and
+        if (hasattr(s, 'Custo_CURTAILMENT') and
             hasattr(self, 'CURTAILMENT') and
             self.CURTAILMENT):
             for t in range(T):
-                for w in range(s.NGER_EOL):
-                    expr += float(s.CPG_CURTAILMENT[w]) * self.CURTAILMENT[t, w]
+                for w in range(s.NGER_GWD):
+                    expr += float(s.Custo_CURTAILMENT[w]) * self.CURTAILMENT[t, w]
 
         # 3. Custo do déficit
-        if hasattr(s, 'CPG_DEFICIT'):
+        if hasattr(s, 'Custo_DEFICT'):
             for t in range(T):
                 for b in range(s.NBAR):
-                    expr += float(s.CPG_DEFICIT) * self.DEFICIT[t, b]
+                    expr += float(s.Custo_DEFICT) * self.DEFICIT[t, b]
 
         # 4. Custo de operação das baterias
         if (hasattr(self, 'CHARGE') and self.CHARGE and
@@ -411,13 +411,13 @@ class TimeCoupledOPFModel:
             dia_semana_nome = dias_nomes[dia_semana-1]
             try:
                 PLOAD_vals = (self.PLOAD[t, :]).tolist()
-                PGER_vals = [pyo.value(self.PGER[t, g]) for g in range(s.NGER_CONV)]
-                QGER_vals = [pyo.value(self.QGER[t, g]) for g in range(s.NGER_CONV)]
+                PGER_vals = [pyo.value(self.PGER[t, g]) for g in range(s.NGER_UTE)]
+                QGER_vals = [pyo.value(self.QGER[t, g]) for g in range(s.NGER_UTE)]
 
-                if s.NGER_EOL > 0:
+                if s.NGER_GWD > 0:
                     PGWIND_disponivel = (self.PGWIND_AVAIL[t, :]).tolist()
-                    PGWIND_vals = [pyo.value(self.PGWIND[t, w]) for w in range(s.NGER_EOL)]
-                    CURTAILMENT_vals = [pyo.value(self.CURTAILMENT[t, w]) for w in range(s.NGER_EOL)]
+                    PGWIND_vals = [pyo.value(self.PGWIND[t, w]) for w in range(s.NGER_GWD)]
+                    CURTAILMENT_vals = [pyo.value(self.CURTAILMENT[t, w]) for w in range(s.NGER_GWD)]
                 else:
                     PGWIND_disponivel = PGWIND_vals = CURTAILMENT_vals = []
 
@@ -452,13 +452,13 @@ class TimeCoupledOPFModel:
                     Q_flow[e] = -vi**2 * b - vi*vj*(g*np.sin(th_i-th_j) - b*np.cos(th_i-th_j))
 
                 # Perdas totais por balanço (simplificado)
-                total_gen = np.sum(PGER_vals) + (np.sum(PGWIND_vals) if s.NGER_EOL > 0 else 0) + np.sum(BESS_operation) + np.sum(DEFICIT_vals)
+                total_gen = np.sum(PGER_vals) + (np.sum(PGWIND_vals) if s.NGER_GWD > 0 else 0) + np.sum(BESS_operation) + np.sum(DEFICIT_vals)
                 total_load = np.sum(PLOAD_vals)
                 perdas_total = total_gen - total_load
                 PERDAS_BARRA = [perdas_total / s.NBAR] * s.NBAR
 
                 DEFICIT_pu = [pyo.value(self.DEFICIT[t, b]) for b in range(s.NBAR)]
-                custo_def = getattr(s, 'CPG_DEFICIT', 1000.0)
+                custo_def = getattr(s, 'Custo_DEFICT', 1000.0)
                 CUSTO = [d * custo_def for d in DEFICIT_pu]
                 CMO = [0.0]
 
@@ -546,8 +546,8 @@ if __name__ == "__main__":
     print(f"   ✓ Potência base: {sistema.SB:.1f} MVA")
     print(f"   ✓ Barras: {sistema.NBAR}")
     print(f"   ✓ Linhas: {sistema.NLIN}")
-    print(f"   ✓ Geradores convencionais: {sistema.NGER_CONV}")
-    print(f"   ✓ Geradores eólicos: {sistema.NGER_EOL}")
+    print(f"   ✓ Geradores convencionais: {sistema.NGER_UTE}")
+    print(f"   ✓ Geradores eólicos: {sistema.NGER_GWD}")
     print(f"   ✓ Baterias: {len(getattr(sistema, 'BARRAS_COM_BATERIA', []))}")
 
     # -------------------------------------------------------------------------
@@ -602,7 +602,7 @@ if __name__ == "__main__":
         """Exemplo: minimizar apenas curtailment e déficit."""
         expr = 0.0
         for t in range(model.horizon_time):
-            for w in range(model.sistema.NGER_EOL):
+            for w in range(model.sistema.NGER_GWD):
                 expr += 1000 * model.CURTAILMENT[t, w]
             for b in range(model.sistema.NBAR):
                 expr += 5000 * model.DEFICIT[t, b]
@@ -639,7 +639,7 @@ if __name__ == "__main__":
         print(f"\n5. Resultados para Hora {snap.hora} (Dia {snap.dia+1}):")
         print(f"   Demanda ativa total:  {sum(snap.PLOAD):.3f} pu")
         print(f"   Geração térmica ativa: {sum(snap.PGER):.3f} pu")
-        if sistema.NGER_EOL > 0:
+        if sistema.NGER_GWD > 0:
             print(f"   Geração eólica total:   {sum(snap.PGWIND):.3f} pu")
             print(f"   Curtailment total:      {sum(snap.CURTAILMENT):.3f} pu")
         print(f"   Déficit total:          {sum(snap.DEFICIT):.3f} pu")
