@@ -195,7 +195,7 @@ class DC_OPF_RNA_Model:
         # Balanço de potência personalizado
         def power_balance_rule(m, b):
             carga = m.PLOAD_BASE[b] * m.FATOR_CARGA
-            ger_conv = sum(m.PGER[g] for g in m.CONV_GENERATORS if s.BARPG_CONV[g] == b)
+            ger_conv = sum(m.PGER[g] for g in m.CONV_GENERATORS if s.BAR_PGER_UTE[g] == b)
             ger_eol = sum(m.PGWIND[g] for g in m.WIND_GENERATORS if s.BARPG_EOL[g] == b)
             bat = sum(m.BatteryOperation[bat] for bat in m.BATTERIES if bat == b)
             deficit = m.DEFICIT[b]
@@ -216,8 +216,8 @@ class DC_OPF_RNA_Model:
             custo_conv = sum(m.PGER[g] * 10.0 for g in m.CONV_GENERATORS)
 
         # Penalidade por déficit
-        if hasattr(s, 'Custo_DEFICT'):
-            custo_def = sum(m.DEFICIT[b] * s.Custo_DEFICT for b in m.BUSES)
+        if hasattr(s, 'custo_DEFICIT '):
+            custo_def = sum(m.DEFICIT[b] * s.custo_DEFICIT  for b in m.BUSES)
         else:
             custo_def = sum(m.DEFICIT[b] * 1000.0 for b in m.BUSES)
 

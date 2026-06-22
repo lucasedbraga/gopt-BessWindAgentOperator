@@ -104,7 +104,7 @@
       "Pmax_descarga": 0.1,
       "capacidade_armazenamento": 1.0,
       "min_soc": 0.1,
-      "custo_carga": 1,
+      "custo_carga": 0.1,
       "custo_descarga": 1
     }
   ]

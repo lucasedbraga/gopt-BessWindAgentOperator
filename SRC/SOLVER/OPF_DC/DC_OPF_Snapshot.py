@@ -67,7 +67,7 @@ class DCOPFSnapshot:
         self.n_line = s.NLIN
         self.n_battery = len(getattr(s, 'BARRAS_COM_BATERIA', []))
 
-        self.thermal_bus = np.array(s.BARPG_CONV, dtype=int)
+        self.thermal_bus = np.array(s.BAR_PGER_UTE, dtype=int)
         self.wind_bus = np.array(getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [])), dtype=int)
 
         self.line_from = np.array(s.line_fr, dtype=int)
@@ -300,7 +300,7 @@ class DCOPFSnapshot:
                 PGER=self.PGER_dict,
                 PGER_MIN_UTE=self.thermal_pmin,
                 PGER_MAX_UTE=self.thermal_pmax,
-                PGER_inicial_UTE=self.sistema.PGER_inicial_UTE,  # array em pu
+                PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,  # array em pu
                 ramp_up_mw=self.sistema.RAMP_UP,
                 ramp_down_mw=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB

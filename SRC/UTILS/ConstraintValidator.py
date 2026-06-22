@@ -69,7 +69,7 @@ def mapear_recursos(sistema):
     # Geradores térmicos
     if hasattr(sistema, 'NGER_UTE') and sistema.NGER_UTE > 0:
         for i in range(sistema.NGER_UTE):
-            bar = sistema.BARPG_CONV[i]
+            bar = sistema.BAR_PGER_UTE[i]
             if bar not in thermal_bars:
                 thermal_bars[bar] = {
                     'pmax': 0.0,

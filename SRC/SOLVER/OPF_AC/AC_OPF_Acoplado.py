@@ -84,7 +84,7 @@ class ACOPF_TimeCoupled:
         self.NLIN = s.NLIN
         self.NBESS = len(getattr(s, 'BARRAS_COM_BATERIA', []))
 
-        self.thermal_bus = np.array(s.BARPG_CONV, dtype=int)
+        self.thermal_bus = np.array(s.BAR_PGER_UTE, dtype=int)
         self.wind_bus = np.array(getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [])), dtype=int)
 
         self.line_from = np.array(s.line_fr, dtype=int)
@@ -229,84 +229,86 @@ class ACOPF_TimeCoupled:
                 self.soc_final_list = []
 
     # ----------------------------------------------------------------------
-    # 4. Criação das variáveis (padrão snapshot)
+    # 4. Criação das variáveis
     # ----------------------------------------------------------------------
     def _add_VARS(self):
         T = self.horizon_time
 
-        # --- Tensão ---
-        self.var_lists['v_pu'] = []
-        for t in range(T):
-            for b in range(self.NBAR):
-                var = pyo.Var(bounds=(0.95, 1.05), initialize=1.0)
-                setattr(self.model, f"V_pu_T{t}_BAR{b+1}", var)
-                self.var_lists['v_pu'].append(var)
-                self.V_dict[(t, b)] = var
-        self.var_indices['v_pu'] = {(t, b): v for (t, b), v in self.V_dict.items()}
+        def _create_VARx_V():
+            self.var_lists['v_pu'] = []
+            for t in range(T):
+                for b in range(self.NBAR):
+                    var = pyo.Var(bounds=(0.95, 1.05), initialize=1.0)
+                    setattr(self.model, f"V_pu_T{t}_BAR{b+1}", var)
+                    self.var_lists['v_pu'].append(var)
+                    self.V_dict[(t, b)] = var
+            self.var_indices['v_pu'] = {(t, b): v for (t, b), v in self.V_dict.items()}
 
-        # --- Ângulo ---
-        self.var_lists['ang_pu'] = []
-        for t in range(T):
-            for b in range(self.NBAR):
-                var = pyo.Var(bounds=(-np.pi, np.pi), initialize=0.0)
-                setattr(self.model, f"ANG_pu_T{t}_BAR{b+1}", var)
-                self.var_lists['ang_pu'].append(var)
-                self.ANG_dict[(t, b)] = var
-            # Fixa ângulo da barra slack
-            setattr(self.model, f"fix_slack_angle_T{t}",
-                    pyo.Constraint(expr=self.ANG_dict[(t, self.slack_bus)] == 0.0))
-        self.var_indices['ang_pu'] = {(t, b): v for (t, b), v in self.ANG_dict.items()}
+        def _create_VARx_ANG():
+            self.var_lists['ang_pu'] = []
+            for t in range(T):
+                for b in range(self.NBAR):
+                    var = pyo.Var(bounds=(-np.pi, np.pi), initialize=0.0)
+                    setattr(self.model, f"ANG_pu_T{t}_BAR{b+1}", var)
+                    self.var_lists['ang_pu'].append(var)
+                    self.ANG_dict[(t, b)] = var
+                # Fixa ângulo da barra slack para cada período
+                setattr(self.model, f"fix_slack_angle_T{t}",
+                        pyo.Constraint(expr=self.ANG_dict[(t, self.slack_bus)] == 0.0))
+            self.var_indices['ang_pu'] = {(t, b): v for (t, b), v in self.ANG_dict.items()}
 
-        # --- Geração térmica ativa ---
-        self.var_lists['PGER_UTE'] = []
-        for t in range(T):
-            for g in range(self.NUTE):
-                var = pyo.Var(bounds=(self.thermal_pmin[g], self.thermal_pmax[g]), initialize=0.0)
-                setattr(self.model, f"PGER_UTE_T{t}_{g+1}", var)
-                self.var_lists['PGER_UTE'].append(var)
-                self.PGER_dict[(t, g)] = var
-        self.var_indices['PGER_UTE'] = {(t, g): v for (t, g), v in self.PGER_dict.items()}
+        def _create_VARx_PGER():
+            self.var_lists['PGER_UTE'] = []
+            for t in range(T):
+                for g in range(self.NUTE):
+                    p_var = pyo.Var(bounds=(self.thermal_pmin[g], self.thermal_pmax[g]), initialize=0.0)
+                    setattr(self.model, f"PGER_UTE_T{t}_{g+1}", p_var)
+                    self.var_lists['PGER_UTE'].append(p_var)
+                    self.PGER_dict[(t, g)] = p_var
+            self.var_indices['PGER_UTE'] = {(t, g): v for (t, g), v in self.PGER_dict.items()}
 
-        # --- Geração térmica reativa ---
-        self.var_lists['QGER_UTE'] = []
-        for t in range(T):
-            for g in range(self.NUTE):
-                var = pyo.Var(bounds=(self.thermal_qmin[g], self.thermal_qmax[g]), initialize=0.0)
-                setattr(self.model, f"QGER_UTE_T{t}_{g+1}", var)
-                self.var_lists['QGER_UTE'].append(var)
-                self.QGER_dict[(t, g)] = var
-        self.var_indices['QGER_UTE'] = {(t, g): v for (t, g), v in self.QGER_dict.items()}
+        def _create_VARx_QGER():
+            self.var_lists['QGER_UTE'] = []
+            for t in range(T):
+                for g in range(self.NUTE):
+                    q_var = pyo.Var(bounds=(self.thermal_qmin[g], self.thermal_qmax[g]), initialize=0.0)
+                    setattr(self.model, f"QGER_UTE_T{t}_{g+1}", q_var)
+                    self.var_lists['QGER_UTE'].append(q_var)
+                    self.QGER_dict[(t, g)] = q_var
+            self.var_indices['QGER_UTE'] = {(t, g): v for (t, g), v in self.QGER_dict.items()}
 
-        # --- Déficit ---
-        self.var_lists['deficit'] = []
-        for t in range(T):
-            for b in range(self.NBAR):
-                var = pyo.Var(bounds=(0, 1e6), initialize=0.0)
-                setattr(self.model, f"DEFICT_T{t}_BAR{b+1}", var)
-                self.var_lists['deficit'].append(var)
-                self.DEFICIT_dict[(t, b)] = var
-        self.var_indices['deficit'] = {(t, b): v for (t, b), v in self.DEFICIT_dict.items()}
+        def _create_VARx_DEF():
+            self.var_lists['deficit'] = []
+            for t in range(T):
+                for b in range(self.NBAR):
+                    var = pyo.Var(bounds=(0, 1e6), initialize=0.0)
+                    setattr(self.model, f"DEFICT_T{t}_BAR{b+1}", var)
+                    self.var_lists['deficit'].append(var)
+                    self.DEFICIT_dict[(t, b)] = var
+            self.var_indices['deficit'] = {(t, b): v for (t, b), v in self.DEFICIT_dict.items()}
 
-        # --- Eólicas  ---
-        if self.NGWD > 0:
+        def _create_VARx_GWD():
+            if self.NGWD == 0:
+                return
             self.var_lists['p_wind'] = []
             self.var_lists['curtailment'] = []
             for t in range(T):
                 for w in range(self.NGWD):
                     avail = self.PGWIND_AVAIL[t, w]
-                    p_var = pyo.Var(bounds=(0, avail), initialize=0.0)
-                    c_var = pyo.Var(bounds=(0, avail), initialize=0.0)
-                    setattr(self.model, f"PGWD_T{t}_{w}", p_var)
-                    setattr(self.model, f"CURTAILMENT_T{t}_{w}", c_var)
-                    self.var_lists['p_wind'].append(p_var)
-                    self.var_lists['curtailment'].append(c_var)
-                    self.PGWIND_dict[(t, w)] = p_var
-                    self.CURTAILMENT_dict[(t, w)] = c_var
+                    p_wind = pyo.Var(bounds=(0, avail), initialize=0.0)
+                    curtail = pyo.Var(bounds=(0, avail), initialize=0.0)
+                    setattr(self.model, f"PGWD_T{t}_{w}", p_wind)
+                    setattr(self.model, f"CURTAILMENT_T{t}_{w}", curtail)
+                    self.var_lists['p_wind'].append(p_wind)
+                    self.var_lists['curtailment'].append(curtail)
+                    self.PGWIND_dict[(t, w)] = p_wind
+                    self.CURTAILMENT_dict[(t, w)] = curtail
             self.var_indices['p_wind'] = {(t, w): v for (t, w), v in self.PGWIND_dict.items()}
             self.var_indices['curtailment'] = {(t, w): v for (t, w), v in self.CURTAILMENT_dict.items()}
 
-        # --- Baterias  ---
-        if self.NBESS > 0:
+        def _create_VARx_BESS():
+            if self.NBESS == 0:
+                return
             self.var_lists['charge'] = []
             self.var_lists['discharge'] = []
             self.var_lists['soc'] = []
@@ -339,13 +341,22 @@ class ACOPF_TimeCoupled:
             self.var_indices['soc'] = {(t, b): v for (t, b), v in self.SOC_dict.items()}
             self.var_indices['battery_op'] = {(t, b): v for (t, b), v in self.BatteryOperation_dict.items()}
 
+        _create_VARx_V()
+        _create_VARx_ANG()
+        _create_VARx_PGER()
+        _create_VARx_QGER()
+        _create_VARx_DEF()
+        _create_VARx_GWD()
+        _create_VARx_BESS()
+
     # ----------------------------------------------------------------------
-    # 5. Adição das restrições (usa as mesmas classes externas do snapshot)
+    # 5. Adição das restrições
     # ----------------------------------------------------------------------
     def _add_CONS(self):
         T = self.horizon_time
+        wind_gen_to_bar = None
+        battery_list = None
 
-        # 1. Geradores térmicos
         if self.NUTE > 0:
             ThermalGeneratorConstraints.add_constraints(
                 model=self.model,
@@ -355,27 +366,27 @@ class ACOPF_TimeCoupled:
                 QGER=self.QGER_dict,
                 PGER_MIN_UTE=self.thermal_pmin,
                 PGER_MAX_UTE=self.thermal_pmax,
-                qgmin_conv=self.thermal_qmin,
-                qgmax_conv=self.thermal_qmax,
-                PGER_inicial_UTE=self.sistema.PGER_inicial_UTE,
+                QGER_MIN_UTE=self.thermal_qmin,
+                QGER_MAX_UTE=self.thermal_qmax,
+                PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,
                 ramp_up_mw=self.sistema.RAMP_UP,
                 ramp_down_mw=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
             )
 
-        # 2. Eólicas
         if self.NGWD > 0:
+            wind_gen_to_bar = self.wind_bus.tolist()
             WindGeneratorConstraints.add_constraints(
                 model=self.model,
                 T=T,
                 NGER_GWD=self.NGWD,
                 PGWIND=self.PGWIND_dict,
                 CURTAILMENT=self.CURTAILMENT_dict,
-                PGWIND_AVAIL=self.PGWIND_AVAIL
+                PGWIND_AVAIL=self.PGWIND_AVAIL   # já é 2D (T, n_wind)
             )
 
-        # 3. Baterias
         if self.NBESS > 0:
+            battery_list = self.battery_buses.tolist()
             BatteryConstraints.add_constraints(
                 model=self.model,
                 sistema=self.sistema,
@@ -386,26 +397,22 @@ class ACOPF_TimeCoupled:
                 SOC=self.SOC_dict,
                 BatteryOperation=self.BatteryOperation_dict,
                 soc_inicial_list=self.soc_inicial_list,
-                soc_final_list=self.soc_final_list if self.soc_final_list else None,
-                daily_reset_to_initial=True   # ou False, conforme desejo
+                soc_final_list=None,      # ou self.soc_final_list se definido
+                daily_reset_to_initial=False
             )
-
-        # 4. Balanço de potência AC (coordenadas polares)
-        wind_gen_to_bar = self.wind_bus.tolist() if self.NGWD > 0 else None
-        battery_list = self.battery_buses.tolist() if self.NBESS > 0 else None
 
         AC_BalanceConstraints.add_constraints(
             model=self.model,
             sistema=self.sistema,
-            HORA=T,  # aqui representa o número de períodos
+            HORA=T,
             G=self.G,
             B=self.B,
             V=self.V_dict,
             ANG=self.ANG_dict,
             PGER=self.PGER_dict,
             QGER=self.QGER_dict,
-            PLOAD=self.PLOAD,
-            QLOAD=self.QLOAD,
+            PLOAD=self.PLOAD,          # 2D (T, n_bus)
+            QLOAD=self.QLOAD,          # 2D (T, n_bus)
             DEFICIT=self.DEFICIT_dict,
             PGWIND=self.PGWIND_dict if self.NGWD > 0 else None,
             BESS_SOC_op=self.BatteryOperation_dict if self.NBESS > 0 else None,
@@ -414,15 +421,11 @@ class ACOPF_TimeCoupled:
             battery_list=battery_list
         )
 
+
     # ----------------------------------------------------------------------
     # 6. Função objetivo (padrão: minimizar custos + penalidades)
     # ----------------------------------------------------------------------
     def _add_FOB(self):
-        """
-        Adiciona a função objetivo ao modelo.
-        Se  for fornecida, usa-a; caso contrário, usa a função padrão.
-        """       
-
         s = self.sistema
         T = self.horizon_time
         expr = 0.0
@@ -445,31 +448,29 @@ class ACOPF_TimeCoupled:
                 for b in range(self.NBAR):
                     expr += float(s.custo_DEFICIT) * self.DEFICIT_dict[(t, b)]
 
-        # Custo de operação das baterias (carga e descarga)
+        # Custo de carga das baterias
         if hasattr(s, 'BATTERY_COST_CHARGE') and self.NBESS > 0:
+            custo_array = s.BATTERY_COST_CHARGE
             for t in range(T):
                 for i, b in enumerate(self.battery_buses):
-                    # Obtém o custo de carga
-                    custo_charge = s.BATTERY_COST_CHARGE
-                    # Se for um array, pega o valor para a bateria i (ou b)
-                    if hasattr(custo_charge, '__getitem__') and len(custo_charge) > 1:
-                        custo_charge = float(custo_charge[i])
+                    if hasattr(custo_array, '__getitem__') and len(custo_array) > 1:
+                        custo = float(custo_array[i])
                     else:
-                        custo_charge = float(custo_charge)
-                    expr += custo_charge * self.CHARGE_dict[(t, b)]
+                        custo = float(custo_array)
+                    expr += custo * self.CHARGE_dict[(t, b)]
 
+        # Custo de descarga das baterias
         if hasattr(s, 'BATTERY_COST_DISCHARGE') and self.NBESS > 0:
+            custo_array = s.BATTERY_COST_DISCHARGE
             for t in range(T):
                 for i, b in enumerate(self.battery_buses):
-                    custo_discharge = s.BATTERY_COST_DISCHARGE
-                    if hasattr(custo_discharge, '__getitem__') and len(custo_discharge) > 1:
-                        custo_discharge = float(custo_discharge[i])
+                    if hasattr(custo_array, '__getitem__') and len(custo_array) > 1:
+                        custo = float(custo_array[i])
                     else:
-                        custo_discharge = float(custo_discharge)
-                    expr += custo_discharge * self.DISCHARGE_dict[(t, b)]
+                        custo = float(custo_array)
+                    expr += custo * self.DISCHARGE_dict[(t, b)]
 
         self.model.FOB = pyo.Objective(expr=expr, sense=pyo.minimize)
-
     # ----------------------------------------------------------------------
     # 7. Construção completa do modelo
     # ----------------------------------------------------------------------
@@ -536,8 +537,7 @@ class ACOPF_TimeCoupled:
         """
         self._build_Cenario(fator_carga, fator_vento, soc_inicial, soc_final)
 
-        # Opcional: imprimir modelo
-        # self.model.pprint()
+        #self.model.pprint()
 
         results = self.solve(solver_name, tee=tee)
 
@@ -630,8 +630,8 @@ class ACOPF_TimeCoupled:
                 PERDAS_TOTAIS = total_gen - total_load
                 PERDAS_BARRA = [PERDAS_TOTAIS / self.NBAR] * self.NBAR
 
-                custo_deficit_pu = getattr(s, 'Custo_DEFICT', 1000.0)
-                CUSTO = [d * custo_deficit_pu for d in DEFICIT_vals]
+                custo_deficit = getattr(s, 'custo_DEFICIT ', 1000.0)
+                CUSTO = [d * custo_deficit for d in DEFICIT_vals]
                 CMO = [0.0]
 
                 snapshots.append(OPF_SnapshotResult(
@@ -700,7 +700,7 @@ if __name__ == "__main__":
 
     # 1. Carregar sistema
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee118_BESS.json"
+    json_path = "DATA/input/3barras_TESTE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)

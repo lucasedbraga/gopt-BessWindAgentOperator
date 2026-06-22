@@ -63,7 +63,7 @@ class ACOPF_Snapshot:
         self.NLIN = s.NLIN
         self.NBESS = len(getattr(s, 'BARRAS_COM_BATERIA', []))
 
-        self.thermal_bus = np.array(s.BARPG_CONV, dtype=int)
+        self.thermal_bus = np.array(s.BAR_PGER_UTE, dtype=int)
         self.wind_bus = np.array(getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [])), dtype=int)
 
         self.line_from = np.array(s.line_fr, dtype=int)
@@ -299,9 +299,9 @@ class ACOPF_Snapshot:
                 QGER=self.QGER_dict,
                 PGER_MIN_UTE=self.thermal_pmin,
                 PGER_MAX_UTE=self.thermal_pmax,
-                qgmin_conv=self.thermal_qmin,
-                qgmax_conv=self.thermal_qmax,
-                PGER_inicial_UTE=self.sistema.PGER_inicial_UTE,
+                QGER_MIN_UTE=self.thermal_qmin,
+                QGER_MAX_UTE=self.thermal_qmax,
+                PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,
                 ramp_up_mw=self.sistema.RAMP_UP,
                 ramp_down_mw=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
@@ -401,7 +401,7 @@ class ACOPF_Snapshot:
                        cen_id=None, write_lp=False, verify=False):
         
         self._build_Cenario(fator_carga, fator_vento, soc_baterias)
-        self.model.pprint()
+        #self.model.pprint()
         results = self.solve(solver_name, write_lp=write_lp)
 
         if self.db_handler is not None and cen_id is not None:
@@ -478,7 +478,7 @@ class ACOPF_Snapshot:
                             + sum(BESS_operation)
                             
             
-            custo_deficit_pu = getattr(s, 'Custo_DEFICT', 1000.0)
+            custo_deficit_pu = getattr(s, 'custo_DEFICIT ', 1000.0)
             CUSTO = [d * custo_deficit_pu for d in DEFICIT_vals]
 
             CMO = [0.0]
@@ -575,7 +575,9 @@ if __name__ == "__main__":
         fator_carga=fator_carga_hora,
         fator_vento=fator_vento_hora,
         soc_baterias=soc_baterias,
-        hora=hora_desejada, dia=0, cen_id=cen_id
+        hora=hora_desejada,
+        dia=0,
+        cen_id=cen_id
     )
 
     if modelo._solved:

@@ -36,7 +36,7 @@ class SistemaLoader:
 
         # --- Geradores convencionais (UTE, UTH) ---
         self.NGER_UTE = 0
-        self.BARPG_CONV = []          # índices das barras dos convencionais
+        self.BAR_PGER_UTE = []          # índices das barras dos convencionais
         self.GER_TIPO = []      # tipos ("UTE", "UTH", etc.)
         self.PGER_MIN = np.array([])
         self.PGER_MAX = np.array([])
@@ -45,7 +45,7 @@ class SistemaLoader:
         self.custo_GER = np.array([])
         self.RAMP_UP = np.array([])
         self.RAMP_DOWN = np.array([])
-        self.PGER_inicial_UTE = np.array([])   # geração inicial (pu)
+        self.PGER_INICIAL_UTE = np.array([])   # geração inicial (pu)
 
         # --- Geradores eólicos (GWD) ---
         self.NGER_GWD = 0
@@ -59,7 +59,7 @@ class SistemaLoader:
         self.gwd_idx_to_pos = {}
 
         # --- Déficit (por barra) ---
-        self.Custo_DEFICT = 5000.0 * self.SB   # custo do déficit (USD/pu), pode ser escalar
+        self.custo_DEFICIT  = 5000.0 * self.SB   # custo do déficit (USD/pu), pode ser escalar
 
         # Carga
         self.PLOAD = np.array([])
@@ -200,12 +200,12 @@ class SistemaLoader:
         Preenche os arrays correspondentes.
         """
         # Listas temporárias para convencionais
-        barpg_conv = []
+        BAR_PGER_UTE = []
         tipos_conv = []
         PGER_MIN_UTE = []
         PGER_MAX_UTE = []
-        qgmin_conv = []
-        qgmax_conv = []
+        QGER_MIN_UTE = []
+        QGER_MAX_UTE = []
         custo_GER = []
         P_ramp_up = []
         P_ramp_down = []
@@ -219,12 +219,12 @@ class SistemaLoader:
 
             if tipo != "GWD":
                 # Gerador convencional
-                barpg_conv.append(barra_idx)
+                BAR_PGER_UTE.append(barra_idx)
                 tipos_conv.append(tipo)
                 PGER_MIN_UTE.append(g.get("PGER_MIN", 0.0))
                 PGER_MAX_UTE.append(g.get("PGER_MAX", 1.0))
-                qgmin_conv.append(g.get("QGER_MIN", 0.0))
-                qgmax_conv.append(g.get("QGER_MAX", 0.0))
+                QGER_MIN_UTE.append(g.get("QGER_MIN", 0.0))
+                QGER_MAX_UTE.append(g.get("QGER_MAX", 0.0))
                 custo_GER.append(g.get("CustoGeracao", 50.0))
                 P_ramp_up.append(g.get("P_ramp_up", 100))
                 P_ramp_down.append(g.get("P_ramp_down", 100))
@@ -233,17 +233,17 @@ class SistemaLoader:
                 pg_inicial_conv.append(pg_ini_mw / self.SB)
 
         # Converte para arrays numpy
-        self.NGER_UTE = len(barpg_conv)
-        self.BARPG_CONV = barpg_conv
+        self.NGER_UTE = len(BAR_PGER_UTE)
+        self.BAR_PGER_UTE = BAR_PGER_UTE
         self.GER_TIPO = tipos_conv
         self.PGER_MIN_UTE = np.array(PGER_MIN_UTE)
         self.PGER_MAX_UTE = np.array(PGER_MAX_UTE)
-        self.QGER_MIN_UTE = np.array(qgmin_conv)
-        self.QGER_MAX_UTE = np.array(qgmax_conv)
+        self.QGER_MIN_UTE = np.array(QGER_MIN_UTE)
+        self.QGER_MAX_UTE = np.array(QGER_MAX_UTE)
         self.custo_GER = np.array(custo_GER)
         self.RAMP_UP = np.array(P_ramp_up)
         self.RAMP_DOWN = np.array(P_ramp_down)
-        self.PGER_inicial_UTE = np.array(pg_inicial_conv)
+        self.PGER_INICIAL_UTE = np.array(pg_inicial_conv)
 
         print(f"  ✓ Geradores processados: {self.NGER_UTE} UTE")
 
@@ -266,7 +266,7 @@ class SistemaLoader:
         # Barras PQ
         barras_PQ = [b for b in self.barras if b["tipo"] == "PQ"]
         # Barras que possuem gerador convencional
-        barras_com_gerador_conv = set(self.BARPG_CONV)
+        barras_com_gerador_conv = set(self.BAR_PGER_UTE)
         # Barras PQ sem gerador convencional (passíveis de déficit)
         self.barras_PQ_sem_gerador = []
         for b in barras_PQ:
@@ -276,7 +276,7 @@ class SistemaLoader:
 
         # Custo do déficit (pode ser um vetor, mas usamos um escalar por simplicidade)
         # Se quiser por barra, pode ser um array do tamanho NBAR
-        self.Custo_DEFICT = 5000.0 * self.SB  # USD/pu
+        self.custo_DEFICIT  = 5000.0 * self.SB  # USD/pu
 
         print(f"  ✓ Déficit: {len(self.barras_PQ_sem_gerador)} barras PQ sem gerador convencional")
 
@@ -400,14 +400,14 @@ class SistemaLoader:
 
             # Geradores convencionais
             'NGER_UTE': self.NGER_UTE,
-            'BARPG_CONV': self.BARPG_CONV,
+            'BAR_PGER_UTE': self.BAR_PGER_UTE,
             'GER_TIPO': self.GER_TIPO,
             'PGER_MIN_UTE': self.PGER_MIN_UTE,
             'PGER_MAX_UTE': self.PGER_MAX_UTE,
             'custo_GER': self.custo_GER,
             'RAMP_UP': self.RAMP_UP,
             'RAMP_DOWN': self.RAMP_DOWN,
-            'PGER_inicial_UTE': self.PGER_inicial_UTE,
+            'PGER_INICIAL_UTE': self.PGER_INICIAL_UTE,
 
             # Geradores eólicos
             'NGER_GWD': self.NGER_GWD,
@@ -420,7 +420,7 @@ class SistemaLoader:
 
             # Déficit
             'barras_PQ_sem_gerador': self.barras_PQ_sem_gerador,
-            'Custo_DEFICT': self.Custo_DEFICT,
+            'custo_DEFICIT ': self.custo_DEFICIT ,
 
             # Carga
             'PLOAD': self.PLOAD,

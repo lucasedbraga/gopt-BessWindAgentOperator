@@ -24,7 +24,7 @@ class ThermalGeneratorConstraints:
         PGER: Dict[Tuple[int, int], poi.Variable],
         PGER_MIN_UTE: List[float],
         PGER_MAX_UTE: List[float],
-        PGER_inicial_UTE: List[float],
+        PGER_INICIAL_UTE: List[float],
         ramp_up_mw: List[float],
         ramp_down_mw: List[float],
         SB: float
@@ -54,11 +54,11 @@ class ThermalGeneratorConstraints:
         # Rampa no primeiro período (comparação com inicial)
         for g in range(NGER_CONV):
             model.add_linear_constraint(
-                PGER[0, g] <= PGER_inicial_UTE[g] + ramp_up_pu[g],
+                PGER[0, g] <= PGER_INICIAL_UTE[g] + ramp_up_pu[g],
                 name=f"first_ramp_up_{g}"
             )
             model.add_linear_constraint(
-                PGER[0, g] >= PGER_inicial_UTE[g] - ramp_down_pu[g],
+                PGER[0, g] >= PGER_INICIAL_UTE[g] - ramp_down_pu[g],
                 name=f"first_ramp_down_{g}"
             )
 
@@ -82,7 +82,7 @@ class ThermalGeneratorConstraints:
         PGER: Dict[Tuple[int, int], poi.Variable],
         PGER_MIN_UTE: List[float],
         PGER_MAX_UTE: List[float],
-        PGER_inicial_UTE: List[float],
+        PGER_INICIAL_UTE: List[float],
         ramp_up_mw: List[float],
         ramp_down_mw: List[float],
         SB: float,
@@ -139,7 +139,7 @@ class ThermalGeneratorConstraints:
                 )
 
         # 3. Determinar estado inicial (antes do período 0)
-        u_inicial = [1 if p > 0 else 0 for p in PGER_inicial_UTE]
+        u_inicial = [1 if p > 0 else 0 for p in PGER_INICIAL_UTE]
 
         # 4. Restrição de permanência mínima de 2 horas no mesmo nível
         #(a geração não pode mudar em dois períodos consecutivos)
@@ -183,11 +183,11 @@ class ThermalGeneratorConstraints:
         for g in range(NGER_CONV):
             # Primeiro período
             model.add_linear_constraint(
-                PGER[0, g] <= PGER_inicial_UTE[g] + ramp_up_pu[g],
+                PGER[0, g] <= PGER_INICIAL_UTE[g] + ramp_up_pu[g],
                 name=f"first_ramp_up_{g}"
             )
             model.add_linear_constraint(
-                PGER[0, g] >= PGER_inicial_UTE[g] - ramp_down_pu[g],
+                PGER[0, g] >= PGER_INICIAL_UTE[g] - ramp_down_pu[g],
                 name=f"first_ramp_down_{g}"
             )
 
@@ -208,7 +208,7 @@ class ThermalGeneratorConstraints:
         min_downtime = 2
 
         # Determinar estado inicial (antes do período 0) a partir da geração inicial
-        u_inicial = [1 if p > 0 else 0 for p in PGER_inicial_UTE]
+        u_inicial = [1 if p > 0 else 0 for p in PGER_INICIAL_UTE]
 
         for g in range(NGER_CONV):
             # Para todos os t onde a janela de 2 períodos cabe no horizonte

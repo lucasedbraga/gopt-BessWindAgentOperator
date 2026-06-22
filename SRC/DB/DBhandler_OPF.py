@@ -247,7 +247,7 @@ class OPF_DBHandler:
             DISP_GWD = 0.0
 
             for g in range(sistema.NGER_UTE):
-                if sistema.BARPG_CONV[g] == i and g < len(resultado.PGER):
+                if sistema.BAR_PGER_UTE[g] == i and g < len(resultado.PGER):
                     PGER_UTE += safe_value(resultado.PGER[g] * SB)
                     QGER_UTE += safe_value(resultado.QGER[g]* SB)
 
@@ -322,7 +322,7 @@ class OPF_DBHandler:
 
         # DGER_results e DLIN_results (mantidos iguais)
         for g in range(sistema.NGER_UTE):
-            barra_idx = sistema.BARPG_CONV[g]
+            barra_idx = sistema.BAR_PGER_UTE[g]
             barra_id = sistema.indice_para_barra[barra_idx]
             tipo = sistema.GER_TIPO[g] if g < len(sistema.GER_TIPO) else "CONV"
             custo = safe_value(sistema.custo_GER[g]) if g < len(sistema.custo_GER) else 0.0
