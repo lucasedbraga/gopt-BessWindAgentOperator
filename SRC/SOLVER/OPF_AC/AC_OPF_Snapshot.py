@@ -18,6 +18,7 @@ from SOLVER.OPF_AC.RES.BatteryConstraints import BatteryConstraints
 from DB.DBmodel_OPF import OPF_SnapshotResult
 
 
+
 class ACOPF_Snapshot:
     """
     Modelo AC-OPF para um único instante usando Pyomo + IPOPT.
@@ -296,11 +297,11 @@ class ACOPF_Snapshot:
                 NGER_UTE=self.NUTE,
                 PGER=self.PGER_dict,
                 QGER=self.QGER_dict,
-                pgmin_conv=self.thermal_pmin,
-                pgmax_conv=self.thermal_pmax,
+                PGER_MIN_UTE=self.thermal_pmin,
+                PGER_MAX_UTE=self.thermal_pmax,
                 qgmin_conv=self.thermal_qmin,
                 qgmax_conv=self.thermal_qmax,
-                pger_inicial_conv=self.sistema.PGER_INICIAL_CONV,
+                PGER_inicial_UTE=self.sistema.PGER_inicial_UTE,
                 ramp_up_mw=self.sistema.RAMP_UP,
                 ramp_down_mw=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
@@ -358,11 +359,9 @@ class ACOPF_Snapshot:
         )
 
     def _add_FOB(self):
-        from FOB import AC_PerdasMinimas
-        
-
+        from FOB import AC_PerdasMinimas      
         FOB = AC_PerdasMinimas.AC_PerdasMinimas(_self=self)
-        self.model.obj = pyo.Objective(expr=FOB, sense=pyo.minimize)
+        self.model.FOB = pyo.Objective(expr=FOB, sense=pyo.minimize)
 
     def _build_AC_OPF(self,
                       fator_carga: Optional[Union[float, np.ndarray]] = None,
@@ -385,8 +384,14 @@ class ACOPF_Snapshot:
     def solve(self, solver_name='ipopt', write_lp=False, **solver_args):
         if self.model is None:
             raise RuntimeError("Modelo não construído.")
+        
         opt = pyo.SolverFactory(solver_name)
+        try:
+            opt.set_executable('/home/lucasedbraga/anaconda3/envs/otm_venv/bin/ipopt')
+        except:
+            pass
         results = opt.solve(self.model, tee=True)
+
         self._solved = (results.solver.status == pyo.SolverStatus.ok and
                         results.solver.termination_condition == pyo.TerminationCondition.optimal)
         return results
@@ -468,8 +473,11 @@ class ACOPF_Snapshot:
                 P_flow[e] = vi**2 * g - vi*vj*(g*np.cos(theta_i-theta_j) + b*np.sin(theta_i-theta_j))
                 Q_flow[e] = -vi**2 * b - vi*vj*(g*np.sin(theta_i-theta_j) - b*np.cos(theta_i-theta_j))
 
-            PERDAS_BARRA = 0 
-
+            PERDAS_TOTAIS =  sum(PGER_vals) - sum(PLOAD_vals) - sum(DEFICIT_vals) \
+                            + sum(PGWIND_vals) - sum(CURTAILMENT_vals) \
+                            + sum(BESS_operation)
+                            
+            
             custo_deficit_pu = getattr(s, 'Custo_DEFICT', 1000.0)
             CUSTO = [d * custo_deficit_pu for d in DEFICIT_vals]
 
@@ -492,8 +500,8 @@ class ACOPF_Snapshot:
                 FLUXO_LIN=P_flow.tolist(),
                 REATIVO_LIN=Q_flow.tolist(),
                 CUSTO=CUSTO, CMO=CMO,
-                PERDAS_BARRA=PERDAS_BARRA,
-                dia_semana_nome=dia_semana_nome
+                PERDAS_TOTAIS=PERDAS_TOTAIS,
+                dia_semana_nome='snapshot'
             )
 
         except Exception as e:
@@ -521,7 +529,7 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee118_BESS.json"
+    json_path = "DATA/input/ieee14_BESS.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -546,7 +554,7 @@ if __name__ == "__main__":
 
     seed = secrets.randbits(32)    
     avaliador = EvaluateFactors(sistema=sistema, n_dias=1, n_horas=1,
-                                carga_incerteza=0.0, vento_variacao=0.0, seed=seed)
+                                carga_incerteza=0.2, vento_variacao=0.1, seed=seed)
     
     fatores_carga_completo, fatores_vento_completo = avaliador.gerar_tudo()
 
@@ -573,15 +581,15 @@ if __name__ == "__main__":
     if modelo._solved:
         resultado = modelo.extract_results(hora=hora_desejada, cen_id=cen_id)
         print(f"\n5. Resultados para Hora {hora_desejada}:")
-        print(f"   Demanda ativa total:  {sum(resultado.PLOAD):.3f} pu")
-        print(f"   Geração térmica Ativa: {sum(resultado.PGER):.3f} pu")
-        print(f"   Demanda Reativa total:  {sum(resultado.QLOAD):.3f} pu")
-        print(f"   Geração térmica Reativa: {sum(resultado.QGER):.3f} pu")
+        print(f"   Demanda Ativa :  {sum(resultado.PLOAD):.3f} pu")
+        print(f"   Geração Ativa (UTE): {sum(resultado.PGER):.3f} pu")
+        print(f"   Demanda Reativa :  {sum(resultado.QLOAD):.3f} pu")
+        print(f"   Geração Reativa (UTE): {sum(resultado.QGER):.3f} pu")
         if sistema.NGER_GWD > 0:
-            print(f"   Geração eólica total:   {sum(resultado.PGWIND):.3f} pu")
-            print(f"   Curtailment total:      {sum(resultado.CURTAILMENT):.3f} pu")
+            print(f"   Geração WIND total:   {sum(resultado.PGWIND):.3f} pu")
+            print(f"   WIND Curtailment total:      {sum(resultado.CURTAILMENT):.3f} pu")
         print(f"   Déficit total:          {sum(resultado.DEFICIT):.3f} pu")
-        #print(f"   Perdas ativas totais:   {sum(resultado.PERDAS_BARRA):.3f} pu")
+        print(f"   Perdas ativas totais:   {resultado.PERDAS_TOTAIS:.3f} pu")
         print(f"   Tensão mínima: {min(resultado.V):.3f} pu, máxima: {max(resultado.V):.3f} pu")
         print(f"   Ângulo slack (ref): {resultado.ANG[sistema.slack_idx]:.3f} rad")
         if sistema.BARRAS_COM_BATERIA:
@@ -590,7 +598,7 @@ if __name__ == "__main__":
                 print(f"      operação = {resultado.BESS_operation[b]:.3f} pu")
                 print(f"      SOC inicial = {resultado.SOC_init[b]:.3f} pu")
                 print(f"      SOC final   = {resultado.SOC_atual[b]:.3f} pu")
-        print(f"   CMO (barra slack): {resultado.CMO[0]:.2f} $/MWh")
+        #print(f"   CMO (barra slack): {resultado.CMO[0]:.2f} $/MWh")
 
     print("\n" + "=" * 70)
     print("EXECUÇÃO CONCLUÍDA")

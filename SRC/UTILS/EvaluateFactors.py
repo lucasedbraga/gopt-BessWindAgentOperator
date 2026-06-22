@@ -176,6 +176,8 @@ class EvaluateFactors:
             # --- Código original (histórico) ---
             if not hasattr(self, 'vento_fatores_por_hora'):
                 raise ValueError("Dados de vento não carregados corretamente.")
+            print("USANDO DADOS HISTORICOS PARA VENTO")
+
             np.random.seed(self.seed)
             n_dias = self.n_dias
             n_horas = self.n_horas
@@ -201,8 +203,10 @@ class EvaluateFactors:
 
             fatores = fatores.reshape(n_dias, n_horas, NGER_GWD)
             return fatores
+        
+        print("USANDO WEIBULL PARA VENTO")
 
-        # --- Nova implementação: Weibull + curva de potência ---
+        # --- Weibull + curva de potência ---
         np.random.seed(self.seed)
         n_dias = self.n_dias
         n_horas = self.n_horas

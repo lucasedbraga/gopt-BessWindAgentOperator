@@ -88,7 +88,7 @@
       "QGER_MAX": 0.94,
       "P_ramp_up": 0.5,
       "P_ramp_down": 0.5,
-      "startup": 10.0,
+      "custo_startup": 10.0,
       "custo_GER": 3.0,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
@@ -105,6 +105,40 @@
       "P_ramp_down": 0.5,
       "startup": 10.0,
       "custo_GER": 30.0,
+      "emissao_tCO2": 0.0,
+      "Unidade": "pu"
+    },
+    {
+      "ID_Gerador": "GWD1",
+      "ID_Barra": "3",
+      "Tipo": "GWD",
+      "PGER_MIN": 0.0,
+      "PGER_MAX": 0.15,
+      "QGER_MIN": -0.1,
+      "QGER_MAX": 0.1,
+      "PGER_inicial": 0.0,
+      "P_ramp_up": 0.15,
+      "P_ramp_down": 0.15,
+      "custo_startup": 10.0,
+      "custo_GER": 1.0,
+      "custo_curtailment": 1.0,
+      "emissao_tCO2": 0.0,
+      "Unidade": "pu"
+    },
+    {
+      "ID_Gerador": "GWD1",
+      "ID_Barra": "14",
+      "Tipo": "GWD",
+      "PGER_MIN": 0.0,
+      "PGER_MAX": 0.15,
+      "QGER_MIN": -0.1,
+      "QGER_MAX": 0.1,
+      "PGER_inicial": 0.0,
+      "P_ramp_up": 0.15,
+      "P_ramp_down": 0.15,
+      "custo_startup": 10.0,
+      "custo_GER": 1.0,
+      "custo_curtailment": 1.0,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
     }
@@ -461,28 +495,5 @@
       "LIM_Fluxo_Unidade": "pu"
     }
   ],
-  "BATERIAS": [
-    {
-      "ID_Bateria": "BAT1",
-      "ID_Barra": "3",
-      "Pmax_carga": 0.15,
-      "Pmax_descarga": 0.2,
-      "capacidade_armazenamento": 1,
-      "Pmin_soc": 0.1,
-      "custo_carga": 1.0,
-      "custo_descarga": 1.0,
-      "Unidade": "pu"
-    },
-    {
-      "ID_Bateria": "BAT2",
-      "ID_Barra": "14",
-      "Pmax_carga": 0.2,
-      "Pmax_descarga": 0.2,
-      "capacidade_armazenamento": 1,
-      "Pmin_soc": 0.1,
-      "custo_carga": 1.5,
-      "custo_descarga": 1.5,
-      "Unidade": "pu"
-    }
-  ]
+  "BATERIAS": []
 }

@@ -22,11 +22,11 @@ class ThermalGeneratorConstraints:
         NGER_UTE: int,
         PGER: Dict[Tuple[int, int], pyo.Var],
         QGER: Optional[Dict[Tuple[int, int], pyo.Var]] = None,
-        pgmin_conv: List[float] = None,
-        pgmax_conv: List[float] = None,
+        PGER_MIN_UTE: List[float] = None,
+        PGER_MAX_UTE: List[float] = None,
         qgmin_conv: Optional[List[float]] = None,
         qgmax_conv: Optional[List[float]] = None,
-        pger_inicial_conv: Optional[List[float]] = None,
+        PGER_inicial_UTE: Optional[List[float]] = None,
         ramp_up_mw: Optional[List[float]] = None,
         ramp_down_mw: Optional[List[float]] = None,
         SB: float = 100.0
@@ -46,11 +46,11 @@ class ThermalGeneratorConstraints:
             Variáveis de potência ativa (pyo.Var), chave (t, g).
         QGER : dict, opcional
             Variáveis de potência reativa (pyo.Var), chave (t, g).
-        pgmin_conv, pgmax_conv : list
+        PGER_MIN_UTE, PGER_MAX_UTE : list
             Limites de potência ativa (pu).
         qgmin_conv, qgmax_conv : list, opcional
             Limites de potência reativa (pu).
-        pger_inicial_conv : list, opcional
+        PGER_inicial_UTE : list, opcional
             Geração ativa inicial (antes do período 0) para rampa.
         ramp_up_mw, ramp_down_mw : list, opcional
             Taxas de rampa em MW/h (convertidas para pu/h com SB).
@@ -60,18 +60,18 @@ class ThermalGeneratorConstraints:
         if NGER_UTE == 0:
             return
 
-        if pgmin_conv is None:
-            pgmin_conv = [0.0] * NGER_UTE
-        if pgmax_conv is None:
-            pgmax_conv = [1.0] * NGER_UTE
+        if PGER_MIN_UTE is None:
+            PGER_MIN_UTE = [0.0] * NGER_UTE
+        if PGER_MAX_UTE is None:
+            PGER_MAX_UTE = [1.0] * NGER_UTE
 
         # Limites de potência ativa
         for t in range(T):
             for g in range(NGER_UTE):
                 setattr(model, f"gen_active_lb_{t}_{g}",
-                        pyo.Constraint(expr=PGER[t, g] >= pgmin_conv[g]))
+                        pyo.Constraint(expr=PGER[t, g] >= PGER_MIN_UTE[g]))
                 setattr(model, f"gen_active_ub_{t}_{g}",
-                        pyo.Constraint(expr=PGER[t, g] <= pgmax_conv[g]))
+                        pyo.Constraint(expr=PGER[t, g] <= PGER_MAX_UTE[g]))
 
         # Limites de potência reativa
         if QGER is not None and qgmin_conv is not None and qgmax_conv is not None:
@@ -83,16 +83,16 @@ class ThermalGeneratorConstraints:
                             pyo.Constraint(expr=QGER[t, g] <= qgmax_conv[g]))
 
         # # Restrições de rampa
-        # if ramp_up_mw is not None and ramp_down_mw is not None and pger_inicial_conv is not None:
+        # if ramp_up_mw is not None and ramp_down_mw is not None and PGER_inicial_UTE is not None:
         #     ramp_up_pu = [r / SB for r in ramp_up_mw]
         #     ramp_down_pu = [r / SB for r in ramp_down_mw]
 
         #     # Primeiro período
         #     for g in range(NGER_UTE):
         #         setattr(model, f"first_ramp_up_{g}",
-        #                 pyo.Constraint(expr=PGER[0, g] <= pger_inicial_conv[g] + ramp_up_pu[g]))
+        #                 pyo.Constraint(expr=PGER[0, g] <= PGER_inicial_UTE[g] + ramp_up_pu[g]))
         #         setattr(model, f"first_ramp_down_{g}",
-        #                 pyo.Constraint(expr=PGER[0, g] >= pger_inicial_conv[g] - ramp_down_pu[g]))
+        #                 pyo.Constraint(expr=PGER[0, g] >= PGER_inicial_UTE[g] - ramp_down_pu[g]))
 
         #     # Demais períodos
         #     for t in range(1, T):

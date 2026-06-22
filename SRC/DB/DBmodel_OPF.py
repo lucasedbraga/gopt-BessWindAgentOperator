@@ -106,7 +106,7 @@ class OPF_SnapshotResult:
     # Custos e perdas
     CUSTO: List[float] = field(default_factory=list)
     CMO: List[float] = field(default_factory=list)
-    PERDAS_BARRA: List[float] = field(default_factory=list)
+    PERDAS_TOTAIS: List[float] = field(default_factory=list)
 
     # Metadados
     mensagem: str = ""

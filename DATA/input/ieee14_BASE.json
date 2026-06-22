@@ -33,8 +33,8 @@
       "QGER_MAX": 500.0,
       "P_ramp_up": 0.5,
       "P_ramp_down": 0.5,
-      "startup_USD": 10.0,
-      "custo_var_USD_MW": 1.0,
+      "custo_startup": 10.0,
+      "custo_GER": 1.0,
       "emissao_tCO2_MW": 0.0,
       "Unidade": "pu"
     },
@@ -48,8 +48,8 @@
       "QGER_MAX": 0.94,
       "P_ramp_up": 0.5,
       "P_ramp_down": 0.5,
-      "startup_USD": 10.0,
-      "custo_var_USD_MW": 3.0,
+      "custo_startup": 10.0,
+      "custo_GER": 3.0,
       "emissao_tCO2_MW": 0.0,
       "Unidade": "pu"
     },
@@ -63,8 +63,8 @@
       "QGER_MAX": 0.84,
       "P_ramp_up": 0.5,
       "P_ramp_down": 0.5,
-      "startup_USD": 10.0,
-      "custo_var_USD_MW": 30.0,
+      "custo_startup": 10.0,
+      "custo_GER": 30.0,
       "emissao_tCO2_MW": 0.0,
       "Unidade": "pu"
     }

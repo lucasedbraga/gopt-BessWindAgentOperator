@@ -44,15 +44,23 @@ class ObjectiveFunction:
 
         # 4. Custo de operação das baterias (desgaste)
         if (hasattr(model_instance, 'CHARGE') and model_instance.CHARGE and 
-            hasattr(s, 'BATTERY_COST')):
+            hasattr(s, 'BATTERY_COST_CHARGE') and hasattr(s, 'BATTERY_COST_DISCHARGE')):
             for t in range(T):
                 for b in model_instance._battery_list:
-                    # Se BATTERY_COST for um vetor indexado por barra, pegar o valor correspondente
-                    if hasattr(s.BATTERY_COST, '__getitem__') and b < len(s.BATTERY_COST):
-                        custo_bateria = s.BATTERY_COST[b]
+                    # Se BATTERY_COST_CHARGE for um vetor indexado por barra, pegar o valor correspondente
+                    if hasattr(s.BATTERY_COST_CHARGE, '__getitem__') and b < len(s.BATTERY_COST_CHARGE):
+                        custo_bateria = s.BATTERY_COST_CHARGE[b]
                     else:
-                        custo_bateria = s.BATTERY_COST  # assume escalar
-                    expr += custo_bateria * (model_instance.CHARGE[t, b] + model_instance.DISCHARGE[t, b])
+                        custo_bateria = s.BATTERY_COST_CHARGE  # assume escalar
+                    expr += custo_bateria * model_instance.CHARGE[t, b]
+
+                for b in model_instance._battery_list:
+                    # Se BATTERY_COST_DISCHARGE for um vetor indexado por barra, pegar o valor correspondente
+                    if hasattr(s.BATTERY_COST_DISCHARGE, '__getitem__') and b < len(s.BATTERY_COST_DISCHARGE):
+                        custo_bateria = s.BATTERY_COST_DISCHARGE[b]
+                    else:
+                        custo_bateria = s.BATTERY_COST_DISCHARGE  # assume escalar
+                    expr += custo_bateria * model_instance.DISCHARGE[t, b]
 
         # Define a função objetivo no modelo (minimização)
         model_instance.model.set_objective(expr, poi.ObjectiveSense.Minimize)

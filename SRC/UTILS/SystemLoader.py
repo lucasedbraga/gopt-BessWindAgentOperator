@@ -42,18 +42,18 @@ class SistemaLoader:
         self.PGER_MAX = np.array([])
         self.QGER_MIN = np.array([])
         self.QGER_MAX = np.array([])
-        self.CustoPGER_UTE = np.array([])
+        self.custo_GER = np.array([])
         self.RAMP_UP = np.array([])
         self.RAMP_DOWN = np.array([])
-        self.PGER_INICIAL_CONV = np.array([])   # geração inicial (pu)
+        self.PGER_inicial_UTE = np.array([])   # geração inicial (pu)
 
         # --- Geradores eólicos (GWD) ---
         self.NGER_GWD = 0
         self.BARPG_EOL = []            # índices das barras dos eólicos
-        self.PGWD_MAX__ORIGINAL = np.array([])   # capacidade instalada (pu)
+        self.PGWD_MAX_ORIGINAL = np.array([])   # capacidade instalada (pu)
         self.PGWD_MAX_EFETIVO = np.array([])    # após fator de vento (pu)
         self.PGWIND_disponivel = np.array([])    # disponibilidade atual (pu) – igual ao efetivo
-        self.Custo_CURTAILMENT = np.array([])      # custo de curtailment por eólico (USD/pu)
+        self.custo_curtailment = np.array([])      # custo de curtailment por eólico (USD/pu)
 
         # Mapeamento auxiliar: índice global do gerador no JSON -> posição na lista de eólicos
         self.gwd_idx_to_pos = {}
@@ -120,7 +120,8 @@ class SistemaLoader:
             self.BATTERY_CAPACITY = np.zeros(self.NBAR)
             self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
             self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
-            self.BATTERY_COST = np.zeros(self.NBAR)
+            self.BATTERY_COST_CHARGE = np.zeros(self.NBAR)
+            self.BATTERY_COST_DISCHARGE = np.zeros(self.NBAR)
 
     def processa_pu(self):
         """Converte todos os valores para PU"""
@@ -137,8 +138,8 @@ class SistemaLoader:
             g["QGER_MAX"] = g.get("QGER_MAX", 0.0) / self.SB
 
             # Custos em USD/pu
-            g["CustoGeracao"] = g.get("custo_var_USD_MW", 0.0) * self.SB
-            g["CustoCurtailment"] = g.get("custo_curtailment_USD_MW", 100.0) * self.SB
+            g["CustoGeracao"] = g.get("custo_GER", 0.0) * self.SB
+            g["CustoCurtailment"] = g.get("custo_curtailment", 100.0) * self.SB
 
         # Demandas
         for d in self.demandas_data:
@@ -201,11 +202,11 @@ class SistemaLoader:
         # Listas temporárias para convencionais
         barpg_conv = []
         tipos_conv = []
-        pgmin_conv = []
-        pgmax_conv = []
+        PGER_MIN_UTE = []
+        PGER_MAX_UTE = []
         qgmin_conv = []
         qgmax_conv = []
-        CustoPGER_UTE = []
+        custo_GER = []
         P_ramp_up = []
         P_ramp_down = []
         pg_inicial_conv = []  # geração inicial (pu)
@@ -220,11 +221,11 @@ class SistemaLoader:
                 # Gerador convencional
                 barpg_conv.append(barra_idx)
                 tipos_conv.append(tipo)
-                pgmin_conv.append(g.get("PGER_MIN", 0.0))
-                pgmax_conv.append(g.get("PGER_MAX", 1.0))
+                PGER_MIN_UTE.append(g.get("PGER_MIN", 0.0))
+                PGER_MAX_UTE.append(g.get("PGER_MAX", 1.0))
                 qgmin_conv.append(g.get("QGER_MIN", 0.0))
                 qgmax_conv.append(g.get("QGER_MAX", 0.0))
-                CustoPGER_UTE.append(g.get("CustoGeracao", 50.0))
+                custo_GER.append(g.get("CustoGeracao", 50.0))
                 P_ramp_up.append(g.get("P_ramp_up", 100))
                 P_ramp_down.append(g.get("P_ramp_down", 100))
                 # Geração inicial: campo opcional, se não existir, assume 0.0
@@ -235,14 +236,14 @@ class SistemaLoader:
         self.NGER_UTE = len(barpg_conv)
         self.BARPG_CONV = barpg_conv
         self.GER_TIPO = tipos_conv
-        self.PGER_MIN_UTE = np.array(pgmin_conv)
-        self.PGER_MAX_UTE = np.array(pgmax_conv)
+        self.PGER_MIN_UTE = np.array(PGER_MIN_UTE)
+        self.PGER_MAX_UTE = np.array(PGER_MAX_UTE)
         self.QGER_MIN_UTE = np.array(qgmin_conv)
         self.QGER_MAX_UTE = np.array(qgmax_conv)
-        self.CustoPGER_UTE = np.array(CustoPGER_UTE)
+        self.custo_GER = np.array(custo_GER)
         self.RAMP_UP = np.array(P_ramp_up)
         self.RAMP_DOWN = np.array(P_ramp_down)
-        self.PGER_INICIAL_CONV = np.array(pg_inicial_conv)
+        self.PGER_inicial_UTE = np.array(pg_inicial_conv)
 
         print(f"  ✓ Geradores processados: {self.NGER_UTE} UTE")
 
@@ -295,17 +296,17 @@ class SistemaLoader:
                 # Gerador eólico
                 pos = len(barpg_eol)
                 barpg_eol.append(barra_idx)
-                pgmax_orig = g.get("PGERmax_pu", 0.0)
+                pgmax_orig = g.get("PGER_MAX", 0.0)
                 pgmax_eol_orig.append(pgmax_orig)
-                custo_curtail.append(g.get("custo_curtailment_pu", 1000.0))
+                custo_curtail.append(g.get("custo_curtailment", 1000.0))
                 self.gwd_idx_to_pos[i] = pos  # mapeia índice global para posição na lista de eólicos
         
         self.NGER_GWD = len(barpg_eol)
         self.BARPG_EOL = barpg_eol
-        self.PGWD_MAX__ORIGINAL = np.array(pgmax_eol_orig)
-        self.PGWD_MAX_EFETIVO = self.PGWD_MAX__ORIGINAL.copy()  # inicialmente igual à original
+        self.PGWD_MAX_ORIGINAL = np.array(pgmax_eol_orig)
+        self.PGWD_MAX_EFETIVO = self.PGWD_MAX_ORIGINAL.copy()  # inicialmente igual à original
         self.PGWIND_disponivel = self.PGWD_MAX_EFETIVO.copy()   # disponibilidade atual (será atualizada)
-        self.Custo_CURTAILMENT = np.array(custo_curtail)
+        self.custo_curtailment = np.array(custo_curtail)
 
         print(f"  ✓ Geradores processados: {self.NGER_GWD} GWD")
 
@@ -324,7 +325,8 @@ class SistemaLoader:
         self.BATTERY_CAPACITY = np.zeros(self.NBAR)
         self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
         self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
-        self.BATTERY_COST = np.zeros(self.NBAR)
+        self.BATTERY_COST_CHARGE = np.zeros(self.NBAR)
+        self.BATTERY_COST_DISCHARGE = np.zeros(self.NBAR)
 
         for bat in self.baterias_data:
             id_barra = str(bat["ID_Barra"])
@@ -350,7 +352,8 @@ class SistemaLoader:
             BATcapacidade_base[idx] = capacidade
             BATarm_inicial_base[idx] = bat.get("SOC_inicial_pu", 0.5) * capacidade
             BATminSoc_base[idx] = bat.get("min_soc_pu", 0.1) * capacidade
-            self.BATTERY_COST[idx] = bat.get("custo_operacao_pu", 10.0)
+            self.BATTERY_COST_CHARGE[idx] = bat.get("custo_carga", 10.0)
+            self.BATTERY_COST_DISCHARGE[idx] = bat.get("custo_descarga", 10.0)
 
         self.BATTERY_POWER_LIMIT = BATmax_in_base.copy()
         self.BATTERY_POWER_OUT = BATmax_out_base.copy()
@@ -364,10 +367,10 @@ class SistemaLoader:
     def atualizar_perfil_eolico(self, fator_vento: float):
         """
         Atualiza a capacidade eólica efetiva com base no fator de vento.
-        PGWD_MAX_EFETIVO = PGWD_MAX__ORIGINAL * fator_vento
+        PGWD_MAX_EFETIVO = PGWD_MAX_ORIGINAL * fator_vento
         PGWIND_disponivel = PGWD_MAX_EFETIVO (disponibilidade atual)
         """
-        self.PGWD_MAX_EFETIVO = self.PGWD_MAX__ORIGINAL * fator_vento
+        self.PGWD_MAX_EFETIVO = self.PGWD_MAX_ORIGINAL * fator_vento
         self.PGWIND_disponivel = self.PGWD_MAX_EFETIVO.copy()
         print(f"  ✓ Perfil eólico atualizado: fator={fator_vento:.3f}")
 
@@ -399,20 +402,20 @@ class SistemaLoader:
             'NGER_UTE': self.NGER_UTE,
             'BARPG_CONV': self.BARPG_CONV,
             'GER_TIPO': self.GER_TIPO,
-            'PGMIN_CONV': self.PGMIN_CONV,
-            'PGMAX_CONV': self.PGMAX_CONV,
-            'CustoPGER_UTE': self.CustoPGER_UTE,
+            'PGER_MIN_UTE': self.PGER_MIN_UTE,
+            'PGER_MAX_UTE': self.PGER_MAX_UTE,
+            'custo_GER': self.custo_GER,
             'RAMP_UP': self.RAMP_UP,
             'RAMP_DOWN': self.RAMP_DOWN,
-            'PGER_INICIAL_CONV': self.PGER_INICIAL_CONV,
+            'PGER_inicial_UTE': self.PGER_inicial_UTE,
 
             # Geradores eólicos
             'NGER_GWD': self.NGER_GWD,
             'BARPG_EOL': self.BARPG_EOL,
-            'PGWD_MAX__ORIGINAL': self.PGWD_MAX__ORIGINAL,
+            'PGWD_MAX_ORIGINAL': self.PGWD_MAX_ORIGINAL,
             'PGWD_MAX_EFETIVO': self.PGWD_MAX_EFETIVO,
             'PGWIND_disponivel': self.PGWIND_disponivel,
-            'Custo_CURTAILMENT': self.Custo_CURTAILMENT,
+            'custo_curtailment': self.custo_curtailment,
             'gwd_idx_to_pos': self.gwd_idx_to_pos,
 
             # Déficit

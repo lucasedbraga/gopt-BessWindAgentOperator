@@ -234,8 +234,8 @@ class TimeCoupledOPFModel:
         for t in range(self.horizon_time):
             for g in range(s.NGER_CONV):
                 self.PGER[t, g] = self.model.add_variable(
-                    lb=s.PGMIN_CONV[g],          # pu
-                    ub=s.PGMAX_CONV[g],          # pu
+                    lb=s.PGER_MIN_UTE[g],          # pu
+                    ub=s.PGER_MAX_UTE[g],          # pu
                     name=f"PGER_{t}_{g}"
                 )
 
@@ -359,9 +359,9 @@ class TimeCoupledOPFModel:
             T=T,
             NGER_CONV=s.NGER_CONV,
             PGER=self.PGER,
-            pgmin_conv=s.PGMIN_CONV,
-            pgmax_conv=s.PGMAX_CONV,
-            pger_inicial_conv=s.PGER_INICIAL_CONV,
+            PGER_MIN_UTE=s.PGER_MIN_UTE,
+            PGER_MAX_UTE=s.PGER_MAX_UTE,
+            PGER_inicial_UTE=s.PGER_inicial_UTE,
             ramp_up_mw=s.RAMP_UP,
             ramp_down_mw=s.RAMP_DOWN,
             SB=s.SB

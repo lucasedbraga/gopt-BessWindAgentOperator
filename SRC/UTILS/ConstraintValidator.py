@@ -79,8 +79,8 @@ def mapear_recursos(sistema):
                     'first_up': 0.0,
                     'first_down': 0.0
                 }
-            thermal_bars[bar]['pmax'] += sistema.PGMAX_CONV[i]
-            thermal_bars[bar]['pmin'] += sistema.PGMIN_CONV[i]
+            thermal_bars[bar]['pmax'] += sistema.PGER_MAX_UTE[i]
+            thermal_bars[bar]['pmin'] += sistema.PGER_MIN_UTE[i]
             thermal_bars[bar]['ramp_up'] += sistema.RAMP_UP[i]
             thermal_bars[bar]['ramp_down'] += sistema.RAMP_DOWN[i]
             # Para a primeira hora, usamos os mesmos limites de rampa (o sistema não fornece valores especiais)

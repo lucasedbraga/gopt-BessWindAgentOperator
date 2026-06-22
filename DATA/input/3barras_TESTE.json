@@ -23,8 +23,8 @@
       "PGER_inicial": 0.3,
       "P_ramp_up": 0.3,
       "P_ramp_down": 0.1,
-      "startup_USD": 1.0,
-      "custo_var_USD_MW": 10.0,
+      "custo_startup": 1.0,
+      "custo_GER": 10.0,
       "emissao_tCO2_MW": 0.3,
       "Unidade": "pu"
     },
@@ -36,9 +36,9 @@
       "PGER_MAX": 0.5,
       "QGER_MIN": -0.2,
       "QGER_MAX": 0.5,
-      "startup_USD": 0.1,
-      "custo_var_USD_MW": 0.0,
-      "custo_curtailment_USD_MW": 1000.0,
+      "custo_startup": 0.1,
+      "custo_GER": 0.0,
+      "custo_curtailment": 1000.0,
       "emissao_tCO2_MW": 0.01,
       "Unidade": "pu"
     }

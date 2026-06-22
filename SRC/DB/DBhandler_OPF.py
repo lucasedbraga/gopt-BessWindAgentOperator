@@ -325,7 +325,7 @@ class OPF_DBHandler:
             barra_idx = sistema.BARPG_CONV[g]
             barra_id = sistema.indice_para_barra[barra_idx]
             tipo = sistema.GER_TIPO[g] if g < len(sistema.GER_TIPO) else "CONV"
-            custo = safe_value(sistema.CustoPGER_UTE[g]) if g < len(sistema.CustoPGER_UTE) else 0.0
+            custo = safe_value(sistema.custo_GER[g]) if g < len(sistema.custo_GER) else 0.0
 
             cursor.execute('''
             INSERT INTO DGER_results (

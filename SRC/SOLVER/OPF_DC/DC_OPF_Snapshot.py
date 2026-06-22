@@ -76,8 +76,8 @@ class DCOPFSnapshot:
         self.line_r = np.array(s.r_line, dtype=float) if hasattr(s, 'r_line') else np.zeros(self.n_line)
         self.line_flow_max = np.array(s.FLIM, dtype=float)
 
-        self.thermal_pmin = np.array(s.PGMIN_CONV, dtype=float)
-        self.thermal_pmax = np.array(s.PGMAX_CONV, dtype=float)
+        self.thermal_pmin = np.array(s.PGER_MIN_UTE, dtype=float)
+        self.thermal_pmax = np.array(s.PGER_MAX_UTE, dtype=float)
         self.thermal_cost = np.array(getattr(s, 'CUSTO_GER', [50.0] * self.n_thermal), dtype=float)
 
         self.battery_buses = np.array(getattr(s, 'BARRAS_COM_BATERIA', []), dtype=int)
@@ -298,9 +298,9 @@ class DCOPFSnapshot:
                 T=1,
                 NGER_CONV=self.n_thermal,
                 PGER=self.PGER_dict,
-                pgmin_conv=self.thermal_pmin,
-                pgmax_conv=self.thermal_pmax,
-                pger_inicial_conv=self.sistema.PGER_INICIAL_CONV,  # array em pu
+                PGER_MIN_UTE=self.thermal_pmin,
+                PGER_MAX_UTE=self.thermal_pmax,
+                PGER_inicial_UTE=self.sistema.PGER_inicial_UTE,  # array em pu
                 ramp_up_mw=self.sistema.RAMP_UP,
                 ramp_down_mw=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB

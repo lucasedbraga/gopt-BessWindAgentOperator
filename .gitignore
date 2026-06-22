@@ -222,3 +222,4 @@ DATA/output_IEEE118/*
 DATA/output_curt/*
 SRC/DB/getters/*
 
+.vscode/settings.json

@@ -53,8 +53,8 @@
       "PGER_inicial": 0.0,
       "P_ramp_up": 1.0,
       "P_ramp_down": 1.0,
-      "startup_USD": 50.0,
-      "custo_var_USD": 10.0,
+      "custo_startup": 50.0,
+      "custo_GER": 10.0,
       "emissao_tCO2": 0.5,
       "Unidade": "pu"
     },
@@ -69,9 +69,9 @@
       "PGER_inicial": 0.0,
       "P_ramp_up": 0.15,
       "P_ramp_down": 0.15,
-      "startup_USD": 10.0,
-      "custo_var_USD": 1.0,
-      "custo_curtailment_USD": 1.0,
+      "custo_startup": 10.0,
+      "custo_GER": 1.0,
+      "custo_curtailment": 1.0,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
     },
@@ -86,9 +86,9 @@
       "PGER_inicial": 0.0,
       "P_ramp_up": 0.12,
       "P_ramp_down": 0.12,
-      "startup_USD": 10.0,
-      "custo_var_USD": 0.5,
-      "custo_curtailment_USD": 0.5,
+      "custo_startup": 10.0,
+      "custo_GER": 0.5,
+      "custo_curtailment": 0.5,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
     }
@@ -172,8 +172,8 @@
       "Pmax_descarga": 0.05,
       "capacidade_armazenamento": 0.1,
       "min_soc": 0.1,
-      "custo_carga_USD": 1.1,
-      "custo_descarga_USD": 1.0,
+      "custo_carga": 1.1,
+      "custo_descarga": 1.0,
       "Unidade": "pu"
     },
     {
@@ -183,8 +183,8 @@
       "Pmax_descarga": 0.05,
       "capacidade_armazenamento": 0.05,
       "min_soc": 0.1,
-      "custo_carga_USD": 1.1,
-      "custo_descarga_USD": 1.0,
+      "custo_carga": 1.1,
+      "custo_descarga": 1.0,
       "Unidade": "pu"
     }
   ]
