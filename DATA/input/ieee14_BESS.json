@@ -1,9 +1,9 @@
 {
-  "S_base": 100.0,
+  "S_base": 1.0,
   "V_base": 1.0,
-  "f_base": 60.0,
-  "P_base": 100.0,
-  "Q_base": 100.0,
+  "f_base": 1.0,
+  "P_base": 1.0,
+  "Q_base": 1.0,
   "BARRAS": [
     {
       "ID_Barra": "1",
@@ -71,8 +71,8 @@
       "PGER_MAX": 5.0,
       "QGER_MIN": -500.0,
       "QGER_MAX": 500.0,
-      "P_ramp_up": 0.5,
-      "P_ramp_down": 0.5,
+      "P_ramp_up": 0.3,
+      "P_ramp_down": 0.3,
       "startup": 10.0,
       "custo_GER": 1.0,
       "emissao_tCO2": 0.0,
@@ -86,9 +86,9 @@
       "PGER_MAX": 2.0,
       "QGER_MIN": -0.06,
       "QGER_MAX": 0.94,
-      "P_ramp_up": 0.5,
-      "P_ramp_down": 0.5,
-      "startup": 10.0,
+      "P_ramp_up": 0.1,
+      "P_ramp_down": 0.1,
+      "custo_startup": 10.0,
       "custo_GER": 3.0,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
@@ -101,10 +101,40 @@
       "PGER_MAX": 5.0,
       "QGER_MIN": -0.06,
       "QGER_MAX": 0.84,
-      "P_ramp_up": 0.5,
-      "P_ramp_down": 0.5,
+      "P_ramp_up": 0.1,
+      "P_ramp_down": 0.1,
       "startup": 10.0,
       "custo_GER": 30.0,
+      "emissao_tCO2": 0.0,
+      "Unidade": "pu"
+    },
+    {
+      "ID_Gerador": "GWD1",
+      "ID_Barra": "3",
+      "Tipo": "GWD",
+      "PGER_MIN": 0.0,
+      "PGER_MAX": 1,
+      "QGER_MIN": -0.1,
+      "QGER_MAX": 0.1,
+      "PGER_inicial": 0.0,
+      "custo_startup": 1.0,
+      "custo_GER": 1.0,
+      "custo_curtailment": 1.0,
+      "emissao_tCO2": 0.0,
+      "Unidade": "pu"
+    },
+    {
+      "ID_Gerador": "GWD1",
+      "ID_Barra": "14",
+      "Tipo": "GWD",
+      "PGER_MIN": 0.0,
+      "PGER_MAX": 1.0,
+      "QGER_MIN": -0.1,
+      "QGER_MAX": 0.1,
+      "PGER_inicial": 0.0,
+      "custo_startup": 1.0,
+      "custo_GER": 1.0,
+      "custo_curtailment": 1.0,
       "emissao_tCO2": 0.0,
       "Unidade": "pu"
     }
@@ -464,24 +494,24 @@
   "BATERIAS": [
     {
       "ID_Bateria": "BAT1",
-      "ID_Barra": "3",
+      "ID_Barra": "2",
       "Pmax_carga": 0.15,
       "Pmax_descarga": 0.2,
       "capacidade_armazenamento": 1,
       "Pmin_soc": 0.1,
-      "custo_carga": 1.0,
-      "custo_descarga": 1.0,
+      "custo_carga": -0.1,
+      "custo_descarga": -0.3,
       "Unidade": "pu"
     },
     {
       "ID_Bateria": "BAT2",
-      "ID_Barra": "14",
+      "ID_Barra": "13",
       "Pmax_carga": 0.2,
       "Pmax_descarga": 0.2,
       "capacidade_armazenamento": 1,
       "Pmin_soc": 0.1,
-      "custo_carga": 1.5,
-      "custo_descarga": 1.5,
+      "custo_carga": -0.1,
+      "custo_descarga": 0.6,
       "Unidade": "pu"
     }
   ]
