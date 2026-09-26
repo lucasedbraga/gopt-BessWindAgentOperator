@@ -223,3 +223,7 @@ DATA/output_curt/*
 SRC/DB/getters/*
 
 .vscode/settings.json
+DATA/output_CLAGTEE_Oficial/*
+DATA/output_IEEE_Test/*
+DATA/output_CUR_Oficial_118b/*
+DATA/output_CUR_Oficial_14b/*

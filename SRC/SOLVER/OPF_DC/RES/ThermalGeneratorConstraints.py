@@ -25,8 +25,8 @@ class ThermalGeneratorConstraints:
         PGER_MIN_UTE: List[float],
         PGER_MAX_UTE: List[float],
         PGER_INICIAL_UTE: List[float],
-        ramp_up_mw: List[float],
-        ramp_down_mw: List[float],
+        RAMP_UP: List[float],
+        RAMP_DOWN: List[float],
         SB: float
     ) -> None:
         """
@@ -36,8 +36,8 @@ class ThermalGeneratorConstraints:
             return
 
         # Converte rampas de MW/h para pu/h
-        ramp_up_pu = [r / SB for r in ramp_up_mw]
-        ramp_down_pu = [r / SB for r in ramp_down_mw]
+        ramp_up_pu = [r / SB for r in RAMP_UP]
+        ramp_down_pu = [r / SB for r in RAMP_DOWN]
 
         # Limites de geração
         for t in range(T):
@@ -83,8 +83,8 @@ class ThermalGeneratorConstraints:
         PGER_MIN_UTE: List[float],
         PGER_MAX_UTE: List[float],
         PGER_INICIAL_UTE: List[float],
-        ramp_up_mw: List[float],
-        ramp_down_mw: List[float],
+        RAMP_UP: List[float],
+        RAMP_DOWN: List[float],
         SB: float,
         min_downtime: int = 4
     ) -> Dict[Tuple[int, int], poi.Variable]:
@@ -102,8 +102,8 @@ class ThermalGeneratorConstraints:
             return {}
 
         # Converte rampas para pu
-        ramp_up_pu = [r / SB for r in ramp_up_mw]
-        ramp_down_pu = [r / SB for r in ramp_down_mw]
+        ramp_up_pu = [r / SB for r in RAMP_UP]
+        ramp_down_pu = [r / SB for r in RAMP_DOWN]
 
         # 1. Criar variáveis binárias de commitment u[t, g]
         u = {}

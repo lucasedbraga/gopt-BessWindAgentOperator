@@ -206,6 +206,7 @@ class SistemaLoader:
         PGER_MAX_UTE = []
         QGER_MIN_UTE = []
         QGER_MAX_UTE = []
+        V_ESP_BUS = []
         custo_GER = []
         P_ramp_up = []
         P_ramp_down = []
@@ -231,6 +232,10 @@ class SistemaLoader:
                 # Geração inicial: campo opcional, se não existir, assume 0.0
                 pg_ini_mw = g.get("PGER_inicial", 0.0)
                 pg_inicial_conv.append(pg_ini_mw / self.SB)
+                if tipo == "SINC":
+                    V_ESP_BUS.append((barra_idx,1))
+                else:
+                    V_ESP_BUS.append(0)
 
         # Converte para arrays numpy
         self.NGER_UTE = len(BAR_PGER_UTE)
@@ -240,6 +245,7 @@ class SistemaLoader:
         self.PGER_MAX_UTE = np.array(PGER_MAX_UTE)
         self.QGER_MIN_UTE = np.array(QGER_MIN_UTE)
         self.QGER_MAX_UTE = np.array(QGER_MAX_UTE)
+        self.V_ESP_BUS = V_ESP_BUS
         self.custo_GER = np.array(custo_GER)
         self.RAMP_UP = np.array(P_ramp_up)
         self.RAMP_DOWN = np.array(P_ramp_down)

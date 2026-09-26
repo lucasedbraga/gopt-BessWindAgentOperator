@@ -7,10 +7,12 @@ import traceback
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))[:-7])
 
 from UTILS.EvaluateFactors import EvaluateFactors
 
 from SOLVER.OPF_AC.RES.BalanceConstraints import AC_BalanceConstraints
+from SOLVER.OPF_AC.RES.LineConstraints import AC_LineConstraints
 from SOLVER.OPF_AC.RES.ThermalGeneratorConstraints import ThermalGeneratorConstraints
 from SOLVER.OPF_AC.RES.WindGeneratorConstraints import WindGeneratorConstraints
 from SOLVER.OPF_AC.RES.BatteryConstraints import BatteryConstraints
@@ -19,7 +21,7 @@ from DB.DBmodel_OPF import OPF_SnapshotResult
 
 
 
-class ACOPF_Snapshot:
+class ACOPF_Snapshot_Model:
     """
     Modelo AC-OPF para um único instante usando Pyomo + IPOPT.
     """
@@ -302,8 +304,8 @@ class ACOPF_Snapshot:
                 QGER_MIN_UTE=self.thermal_qmin,
                 QGER_MAX_UTE=self.thermal_qmax,
                 PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,
-                ramp_up_mw=self.sistema.RAMP_UP,
-                ramp_down_mw=self.sistema.RAMP_DOWN,
+                RAMP_UP=self.sistema.RAMP_UP,
+                RAMP_DOWN=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
             )
 
@@ -358,8 +360,22 @@ class ACOPF_Snapshot:
             battery_list=battery_list
         )
 
+
+        AC_LineConstraints.add_constraints(
+            model=self.model,
+            sistema=self.sistema,
+            HORA=1,
+            V=self.V_dict,               
+            ANG=self.ANG_dict,
+            line_from=self.line_from,
+            line_to=self.line_to,
+            line_r=self.line_r,
+            line_x=self.line_x,
+            line_flow_max=self.line_flow_max   
+        )
+        
     def _add_FOB(self):
-        from FOB import AC_PerdasMinimas      
+        from SOLVER.OPF_AC.FOB import AC_PerdasMinimas      
         FOB = AC_PerdasMinimas.AC_PerdasMinimas(_self=self)
         self.model.FOB = pyo.Objective(expr=FOB, sense=pyo.minimize)
 
@@ -529,7 +545,7 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee14_BESS.json"
+    json_path = "DATA/input/ieee14_BASE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -548,9 +564,9 @@ if __name__ == "__main__":
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S') + "_ACOPF_snapshot"
     print(f"   ✓ Cenário ID: {cen_id}")
 
-    modelo = ACOPF_Snapshot(sistema=sistema, db_handler=db_handler)
+    modelo = ACOPF_Snapshot_Model(sistema=sistema, db_handler=db_handler)
 
-    hora_desejada = 0
+    hora_desejada = 16
 
     seed = secrets.randbits(32)    
     avaliador = EvaluateFactors(sistema=sistema, n_dias=1, n_horas=1,
@@ -558,8 +574,8 @@ if __name__ == "__main__":
     
     fatores_carga_completo, fatores_vento_completo = avaliador.gerar_tudo()
 
-    fator_carga_hora = fatores_carga_completo[0, hora_desejada, :]
-    fator_vento_hora = fatores_vento_completo[0, hora_desejada, :] if sistema.NGER_GWD > 0 else 1.0
+    fator_carga_hora = fatores_carga_completo[0, 0, :]
+    fator_vento_hora = fatores_vento_completo[0, 0, :] if sistema.NGER_GWD > 0 else 1.0
 
     print(f"\n3. Parâmetros para Hora {hora_desejada}:")
     print(f"   Fator de carga médio: {np.mean(fator_carga_hora):.3f}")

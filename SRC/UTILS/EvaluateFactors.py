@@ -16,7 +16,8 @@ class EvaluateFactors:
     def __init__(self,
                  sistema,
                  n_dias,
-                 n_horas, 
+                 n_horas,
+                 hora_interesse=None,
                  carga_incerteza=0.2,
                  vento_variacao=0.1,
                  seed=None):
@@ -36,14 +37,14 @@ class EvaluateFactors:
         
         if (n_dias == 1
             and n_horas ==1):
-                    self.carga_perfil_horario = np.array([1])
+                    self.carga_perfil_horario = np.array([0.94])
         else:
             # Perfil horário normalizado (pico = 1.0)
             self.carga_perfil_horario = np.array([
-                0.65, 0.62, 0.60, 0.60, 0.62, 0.70,  # 0-5h (madrugada)
-                0.75, 0.70, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
-                0.92, 0.90, 0.88, 0.90, 0.92, 0.95,  # 12-17h (tarde)
-                1.00, 0.98, 0.95, 0.90, 0.75, 0.55   # 18-23h (noite/pico)
+                0.65, 0.69, 0.60, 0.61, 0.62, 0.70,  # 0-5h (madrugada)
+                0.75, 0.71, 0.80, 0.85, 0.88, 0.90,  # 6-11h (manhã)
+                0.92, 0.91, 0.87, 0.93, 0.94, 0.96,  # 12-17h (tarde)
+                1.00, 0.98, 0.95, 0.97, 0.74, 0.55   # 18-23h (noite/pico)
             ])
 
 

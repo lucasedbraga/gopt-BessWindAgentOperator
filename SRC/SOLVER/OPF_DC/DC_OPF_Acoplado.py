@@ -362,8 +362,8 @@ class TimeCoupledOPFModel:
             PGER_MIN_UTE=s.PGER_MIN_UTE,
             PGER_MAX_UTE=s.PGER_MAX_UTE,
             PGER_INICIAL_UTE=s.PGER_INICIAL_UTE,
-            ramp_up_mw=s.RAMP_UP,
-            ramp_down_mw=s.RAMP_DOWN,
+            RAMP_UP=s.RAMP_UP,
+            RAMP_DOWN=s.RAMP_DOWN,
             SB=s.SB
         )
 

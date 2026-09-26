@@ -301,8 +301,8 @@ class DCOPFSnapshot:
                 PGER_MIN_UTE=self.thermal_pmin,
                 PGER_MAX_UTE=self.thermal_pmax,
                 PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,  # array em pu
-                ramp_up_mw=self.sistema.RAMP_UP,
-                ramp_down_mw=self.sistema.RAMP_DOWN,
+                RAMP_UP=self.sistema.RAMP_UP,
+                RAMP_DOWN=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
             )
 

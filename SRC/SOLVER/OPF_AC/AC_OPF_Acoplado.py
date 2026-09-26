@@ -21,6 +21,8 @@ from SOLVER.OPF_AC.RES.BatteryConstraints import BatteryConstraints
 from SOLVER.OPF_AC.RES.ThermalGeneratorConstraints import ThermalGeneratorConstraints
 from SOLVER.OPF_AC.RES.WindGeneratorConstraints import WindGeneratorConstraints
 from SOLVER.OPF_AC.RES.BalanceConstraints import AC_BalanceConstraints
+from SOLVER.OPF_AC.RES.LineConstraints import AC_LineConstraints
+from SOLVER.OPF_AC.RES.ControlBusConstraints import VoltageControlConstraints
 from DB.DBmodel_OPF import TimeCoupled_OPF_Result, OPF_SnapshotResult
 
 
@@ -104,6 +106,11 @@ class ACOPF_TimeCoupled:
         else:
             self.thermal_qmin = 0 * self.thermal_pmax
             self.thermal_qmax = 0 * self.thermal_pmax
+        
+        if hasattr(s, 'V_ESP_BUS') and hasattr(s, 'V_ESP_BUS'):
+            self.V_ESP = s.V_ESP_BUS
+        else:
+            self.V_ESP = 0
 
         self.battery_buses = np.array(getattr(s, 'BARRAS_COM_BATERIA', []), dtype=int)
         if self.NBESS > 0:
@@ -369,10 +376,19 @@ class ACOPF_TimeCoupled:
                 QGER_MIN_UTE=self.thermal_qmin,
                 QGER_MAX_UTE=self.thermal_qmax,
                 PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,
-                ramp_up_mw=self.sistema.RAMP_UP,
-                ramp_down_mw=self.sistema.RAMP_DOWN,
+                RAMP_UP=self.sistema.RAMP_UP,
+                RAMP_DOWN=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
             )
+
+            VoltageControlConstraints.add_constraints(
+            model=self.model,
+            T=T,
+            V_PU=self.V_dict,
+            V_ESP=self.V_ESP
+            )
+
+
 
         if self.NGWD > 0:
             wind_gen_to_bar = self.wind_bus.tolist()
@@ -397,7 +413,7 @@ class ACOPF_TimeCoupled:
                 SOC=self.SOC_dict,
                 BatteryOperation=self.BatteryOperation_dict,
                 soc_inicial_list=self.soc_inicial_list,
-                soc_final_list=None,      # ou self.soc_final_list se definido
+                soc_final_list=self.soc_final_list,
                 daily_reset_to_initial=False
             )
 
@@ -419,6 +435,19 @@ class ACOPF_TimeCoupled:
             conv_gen_to_bar=self.thermal_bus.tolist(),
             wind_gen_to_bar=wind_gen_to_bar,
             battery_list=battery_list
+        )
+        
+        AC_LineConstraints.add_constraints(
+            model=self.model,
+            sistema=self.sistema,
+            HORA=T,
+            V=self.V_dict,               
+            ANG=self.ANG_dict,
+            line_from=self.line_from,
+            line_to=self.line_to,
+            line_r=self.line_r,
+            line_x=self.line_x,
+            line_flow_max=self.line_flow_max   
         )
 
 
@@ -700,7 +729,7 @@ if __name__ == "__main__":
 
     # 1. Carregar sistema
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/3barras_TESTE.json"
+    json_path = "DATA/input/ieee14_BESS.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -724,7 +753,7 @@ if __name__ == "__main__":
 
     # 3. Banco de dados
     print("\n3. Configurando banco de dados...")
-    db_handler = OPF_DBHandler('DATA/output/resultados_PL_acoplado_AC.db')
+    db_handler = OPF_DBHandler('DATA/output/14_resultados_PL_acoplado_AC.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S')
     print(f"   ✓ Cenário ID: {cen_id}")

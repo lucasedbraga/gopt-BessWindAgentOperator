@@ -6,7 +6,7 @@ As rotinas de balanço foram separadas em add_P_Balance e add_Q_Balance.
 """
 import numpy as np
 import pyomo.environ as pyo
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 
 
 class AC_BalanceConstraints:
@@ -30,13 +30,13 @@ class AC_BalanceConstraints:
         PLOAD: np.ndarray,
         UTE_na_BARRA: List[List[int]],
         GWD_na_BARRA: List[List[int]],
-        BESS_na_BARRA: List[List[int]],
+        BESS_barras: Set[int],                   # <<< agora é um set de barras
         BESS_SOC_op: Optional[Dict[Tuple[int, int], pyo.Var]]
     ):
         """
         Retorna a expressão da restrição de balanço de potência ativa
         para a barra i no instante t:
-        P_inj = P_ger + P_BESS_op + P_def - P_load
+            P_inj = P_ger + P_BESS_op + P_def - P_load
         """
         NBAR = G.shape[0]
 
@@ -61,15 +61,16 @@ class AC_BalanceConstraints:
         if PGWIND is not None:
             P_ger += sum(PGWIND[t, w] for w in GWD_na_BARRA[i])
 
-        # Operação líquida da bateria (já é descarga - carga)
+        # Operação líquida da bateria (descarga - carga)
+        # CORREÇÃO: usa o set de barras com bateria (teste O(1) e correto)
         P_BESS_op = 0.0
-        if BESS_na_BARRA and i in BESS_na_BARRA and BESS_SOC_op is not None:
+        if BESS_SOC_op is not None and i in BESS_barras:
             P_BESS_op = BESS_SOC_op[t, i]
 
         P_def = DEFICIT[t, i]
         P_load = PLOAD[t, i]
 
-        # Balanço: P_inj - (geração + bateria + déficit - carga) = 0
+        # Balanço: P_inj = geração + bateria + déficit - carga
         return P_inj - (P_ger + P_BESS_op + P_def - P_load) == 0
 
     # ------------------------------------------------------------------
@@ -89,7 +90,7 @@ class AC_BalanceConstraints:
         """
         Retorna a expressão da restrição de balanço de potência reativa
         para a barra i no instante t:
-        Q_inj = Q_ger - Q_load
+            Q_inj = Q_ger - Q_load
         """
         NBAR = G.shape[0]
 
@@ -145,7 +146,7 @@ class AC_BalanceConstraints:
         # Conjunto de índices (hora, i) para as restrições
         model.TimeBusSet = pyo.Set(initialize=[(t, i) for t in range(HORA) for i in range(NBAR)])
 
-        # Mapeamentos gerador → barra
+        # --- Mapeamentos gerador → barra ---
         UTE_na_BARRA = [[] for _ in range(NBAR)]
         if conv_gen_to_bar is not None:
             for g, bus in enumerate(conv_gen_to_bar):
@@ -156,16 +157,27 @@ class AC_BalanceConstraints:
             for w, bus in enumerate(wind_gen_to_bar):
                 GWD_na_BARRA[bus].append(w)
 
-        BESS_na_BARRA = [[] for _ in range(NBAR)]
+        # CORREÇÃO: usar um set de barras com bateria (teste O(1) e correto)
+        BESS_barras: Set[int] = set()
         if battery_list is not None and BESS_SOC_op is not None:
-            for b in battery_list:
-                BESS_na_BARRA[b].append(b)   # apenas marcamos que a barra tem bateria
+            BESS_barras = set(battery_list)
+            # Sanity check: toda barra em battery_list deve ter variável associada
+            for b in BESS_barras:
+                if not (0 <= b < NBAR):
+                    raise ValueError(f"Barra {b} de bateria fora do intervalo [0, {NBAR-1}]")
+                # Se BESS_SOC_op for indexado por (t, b), exige a chave (0, b)
+                if (0, b) not in BESS_SOC_op:
+                    raise KeyError(
+                        f"BESS_SOC_op não contém a chave (0, {b}). "
+                        f"Verifique se o índice da bateria coincide entre "
+                        f"criação de variáveis e balanço."
+                    )
 
         # Regras para as constraints que chamam as rotinas estáticas
         def C_Balanco_P(m, t, i):
             return AC_BalanceConstraints.add_P_Balance(
                 m, t, i, V, ANG, G, B, PGER, PGWIND, DEFICIT, PLOAD,
-                UTE_na_BARRA, GWD_na_BARRA, BESS_na_BARRA, BESS_SOC_op
+                UTE_na_BARRA, GWD_na_BARRA, BESS_barras, BESS_SOC_op
             )
 
         def C_Balanco_Q(m, t, i):

@@ -77,7 +77,6 @@ class OPF_SnapshotResult:
     dia_semana: int = 0
     dia_semana_nome: str = ""
 
-
     PLOAD: List[float] = field(default_factory=list)
     QLOAD: List[float] = field(default_factory=list)
     # Geração térmica (lista por gerador)

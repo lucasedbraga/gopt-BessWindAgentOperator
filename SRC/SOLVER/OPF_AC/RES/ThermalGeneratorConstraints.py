@@ -27,8 +27,8 @@ class ThermalGeneratorConstraints:
         QGER_MIN_UTE: Optional[List[float]] = None,
         QGER_MAX_UTE: Optional[List[float]] = None,
         PGER_INICIAL_UTE: Optional[List[float]] = None,
-        ramp_up_mw: Optional[List[float]] = None,
-        ramp_down_mw: Optional[List[float]] = None,
+        RAMP_UP: Optional[List[float]] = None,
+        RAMP_DOWN: Optional[List[float]] = None,
         SB: float = 100.0
     ) -> None:
         """
@@ -52,7 +52,7 @@ class ThermalGeneratorConstraints:
             Limites de potência reativa (pu).
         PGER_INICIAL_UTE : list, opcional
             Geração ativa inicial (antes do período 0) para rampa.
-        ramp_up_mw, ramp_down_mw : list, opcional
+        RAMP_UP, RAMP_DOWN : list, opcional
             Taxas de rampa em MW/h (convertidas para pu/h com SB).
         SB : float
             Potência base (MVA).
@@ -83,21 +83,19 @@ class ThermalGeneratorConstraints:
                             pyo.Constraint(expr=QGER[t, g] <= QGER_MAX_UTE[g]))
 
         # # Restrições de rampa
-        # if ramp_up_mw is not None and ramp_down_mw is not None and PGER_INICIAL_UTE is not None:
-        #     ramp_up_pu = [r / SB for r in ramp_up_mw]
-        #     ramp_down_pu = [r / SB for r in ramp_down_mw]
+        if RAMP_UP is not None and RAMP_DOWN is not None and PGER_INICIAL_UTE is not None:
 
-        #     # Primeiro período
-        #     for g in range(NGER_UTE):
-        #         setattr(model, f"first_ramp_up_{g}",
-        #                 pyo.Constraint(expr=PGER[0, g] <= PGER_INICIAL_UTE[g] + ramp_up_pu[g]))
-        #         setattr(model, f"first_ramp_down_{g}",
-        #                 pyo.Constraint(expr=PGER[0, g] >= PGER_INICIAL_UTE[g] - ramp_down_pu[g]))
+            # Primeiro período
+            for g in range(NGER_UTE):
+                setattr(model, f"first_ramp_up_{g}",
+                        pyo.Constraint(expr=PGER[0, g] <= PGER_INICIAL_UTE[g] + RAMP_UP[g]))
+                setattr(model, f"first_ramp_down_{g}",
+                        pyo.Constraint(expr=PGER[0, g] >= PGER_INICIAL_UTE[g] - RAMP_DOWN[g]))
 
-        #     # Demais períodos
-        #     for t in range(1, T):
-        #         for g in range(NGER_UTE):
-        #             setattr(model, f"ramp_up_{t}_{g}",
-        #                     pyo.Constraint(expr=PGER[t, g] <= PGER[t-1, g] + ramp_up_pu[g]))
-        #             setattr(model, f"ramp_down_{t}_{g}",
-        #                     pyo.Constraint(expr=PGER[t, g] >= PGER[t-1, g] - ramp_down_pu[g]))
+            # Demais períodos
+            for t in range(1, T):
+                for g in range(NGER_UTE):
+                    setattr(model, f"ramp_up_{t}_{g}",
+                            pyo.Constraint(expr=PGER[t, g] <= PGER[t-1, g] + RAMP_UP[g]))
+                    setattr(model, f"ramp_down_{t}_{g}",
+                            pyo.Constraint(expr=PGER[t, g] >= PGER[t-1, g] - RAMP_DOWN[g]))

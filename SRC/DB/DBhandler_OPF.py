@@ -36,10 +36,10 @@ class OPF_DBHandler:
             tempo_execucao REAL,
             solver_cenario TEXT,
             sistema_cenario TEXT,
-            fator_vento_cenario REAL,
-            PLOAD_cenario TEXT,                       
+            PLOAD_cenario TEXT,
+            QLOAD_cenario TEXT,                       
             PGER_result TEXT,
-            QGER_result REAL,
+            QGER_result TEXT,
             PGWIND_disponivel_cenario TEXT,             
             PGWIND_result TEXT,
             CURTAILMENT_result TEXT,
@@ -65,7 +65,8 @@ class OPF_DBHandler:
             hora_simulacao INTEGER,
             BAR_id INTEGER,
             BAR_tipo TEXT,
-            PLOAD_cenario REAL,                       
+            PLOAD_cenario REAL,
+            QLOAD_cenario REAL,                         
             PGER_UTE_result REAL,
             QGER_UTE_result REAL,
             PLOSS_result REAL,
@@ -167,7 +168,9 @@ class OPF_DBHandler:
             if arr is None or len(arr) == 0:
                 return default
             return json.dumps([safe_value(x) for x in arr])
-
+        
+        PLOAD_cenario_json = json_from_array(resultado.PLOAD)
+        QLOAD_cenario_json = json_from_array(resultado.QLOAD)
         PGER_result_json = json_from_array(resultado.PGER)
         QGER_result_json = json_from_array(resultado.QGER)
         pgwind_result_json = json_from_array(resultado.PGWIND)
@@ -196,8 +199,8 @@ class OPF_DBHandler:
             tempo_execucao,
             solver_cenario,
             sistema_cenario,
-            fator_vento_cenario,
             PLOAD_cenario,
+            QLOAD_cenario,
             PGER_result,
             QGER_result,
             PGWIND_disponivel_cenario,
@@ -220,8 +223,8 @@ class OPF_DBHandler:
             safe_value(getattr(resultado, 'tempo_execucao', 0.0)),
             solver_name,
             getattr(sistema, 'json_file_path', 'unknown'),
-            0,
-            0,
+            PLOAD_cenario_json,
+            QLOAD_cenario_json,
             PGER_result_json,
             QGER_result_json,
             pgwind_disponivel_json,
@@ -273,8 +276,9 @@ class OPF_DBHandler:
             bess_op = safe_value(resultado.BESS_operation[i]) if i < len(resultado.BESS_operation) else 0.0
             bess_atual = safe_value(resultado.SOC_atual[i]) if i < len(resultado.SOC_atual) else 0.0
 
-            load_mw = safe_value(resultado.PLOAD[i] * SB) if i < len(resultado.PLOAD) else safe_value(sistema.PLOAD[i] * SB)
-
+            PLOAD = safe_value(resultado.PLOAD[i] * SB) if i < len(resultado.PLOAD) else safe_value(sistema.PLOAD[i] * SB)
+            QLOAD = safe_value(resultado.QLOAD[i] * SB) if i < len(resultado.QLOAD) else safe_value(sistema.QLOAD[i] * SB)
+            
             cursor.execute('''
             INSERT INTO DBAR_results (
                 cen_id,
@@ -285,6 +289,7 @@ class OPF_DBHandler:
                 BAR_id,
                 BAR_tipo,
                 PLOAD_cenario,
+                QLOAD_cenario,
                 PGER_UTE_result,
                 QGER_UTE_result,
                 PLOSS_result,
@@ -296,7 +301,7 @@ class OPF_DBHandler:
                 BESS_operation_result,
                 BESS_soc_atual_result,
                 V_result, ANG_result
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 cen_id,
                 timestamp,
@@ -305,7 +310,8 @@ class OPF_DBHandler:
                 int(hora),
                 barra_id,
                 tipo_barra,
-                load_mw, 
+                PLOAD,
+                QLOAD,
                 safe_value(PGER_UTE),
                 safe_value(QGER_UTE),
                 perdas,
@@ -418,17 +424,24 @@ class OPF_DBHandler:
                 fluxo_mw = safe_value(resultado.FLUXO_LIN[e] * SB)
                 limite_mw = safe_value(sistema.FLIM[e] * SB)
                 perdas_mw = safe_value(sistema.r_line[e] * (resultado.FLUXO_LIN[e] ** 2) * SB)
-                carreg = safe_value(((abs(fluxo_mw) + perdas_mw) / limite_mw) * 100) if limite_mw > 0 else 0.0
+                carreg = safe_value(((abs(fluxo_mw)) / limite_mw) * 100) if limite_mw > 0 else 0.0
 
                 cursor.execute('''
                 INSERT INTO DLIN_results (
-                    cen_id, timestamp, data_simulacao, hora_simulacao,
-                    linha_id, de_barra, para_barra,
-                    PLIM_FLUX, FLUX_result, PLOSS_result, LIN_usage_result
+                    cen_id,
+                    timestamp,
+                    data_simulacao,
+                    hora_simulacao,
+                    linha_id,
+                    de_barra,
+                    para_barra,
+                    PLIM_FLUX,
+                    FLUX_result,
+                    PLOSS_result,
+                    LIN_usage_result
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    cen_id, timestamp, dia, int(hora),
-                    e, de, para,
+                    cen_id, timestamp, dia, int(hora), e, de, para,
                     limite_mw, fluxo_mw, perdas_mw, carreg
                 ))
 

@@ -152,9 +152,13 @@ class RNADataAnalyzer:
         - variables: lista de colunas a analisar (padrão: as cinco variáveis principais)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         # Verificar existência das colunas
         missing = [v for v in variables if v not in self.df.columns]
         if missing:
@@ -171,10 +175,13 @@ class RNADataAnalyzer:
         Plota o perfil horário médio (linha com banda de desvio padrão) para cada variável.
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
-
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         n_vars = len(variables)
         fig, axes = plt.subplots(n_vars, 1, figsize=(12, 3 * n_vars), sharex=True)
         if n_vars == 1:
@@ -216,9 +223,13 @@ class RNADataAnalyzer:
         - bar_ids: lista de IDs de barras a considerar (None = todas)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                'PGWIND_disponivel_cenario',
+                'CURTAILMENT_total_result',
+                'V_result',
+                'PGER_UTE_result',
+                'QGER_UTE_result'
+            ]
         missing = [v for v in variables if v not in self.df.columns]
         if missing:
             raise ValueError(f"Colunas não encontradas: {missing}")
@@ -241,9 +252,13 @@ class RNADataAnalyzer:
         Plota o perfil horário médio para cada variável, separadamente para cada barra.
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
 
         if 'BAR_id' not in self.df.columns:
             raise ValueError("Coluna 'BAR_id' não encontrada.")
@@ -312,9 +327,13 @@ class RNADataAnalyzer:
         Retorna um DataFrame com MultiIndex (BAR_id, hora_simulacao) e as estatísticas.
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         # Verificar existência das colunas
         missing = [v for v in variables if v not in self.df.columns]
         if missing:
@@ -347,9 +366,13 @@ class RNADataAnalyzer:
         - save_path: caminho para salvar a figura (opcional)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
 
         # Verificar existência de BAR_id
         if 'BAR_id' not in self.df.columns:
@@ -419,9 +442,13 @@ class RNADataAnalyzer:
         Calcula e plota a matriz de correlação entre as variáveis selecionadas.
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         # Selecionar apenas as colunas relevantes
         corr_data = self.df[variables].copy()
         # Remover outliers extremos (opcional: usar percentis)
@@ -444,9 +471,13 @@ class RNADataAnalyzer:
         Retorna estatísticas descritivas básicas (média, desvio, skew, kurtosis).
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         desc = self.df[variables].describe(percentiles=[0.25, 0.5, 0.75]).T
         # Adicionar skewness e kurtosis
         for var in variables:
@@ -490,9 +521,13 @@ class RNADataAnalyzer:
         - save_dir: diretório para salvar as figuras (se None, exibe na tela)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGER_UTE_result', 'PGWIND_disponivel_cenario',
-                        'CURTAILMENT_total_result',
-                      ]
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         
         # Verificar existência das colunas
         missing = [v for v in variables if v not in self.df.columns]
@@ -580,8 +615,12 @@ class RNADataAnalyzer:
         - save_dir: diretório para salvar as figuras (se None, exibe na tela)
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGER_UTE_result', 'PGWIND_disponivel_cenario',
-                        'CURTAILMENT_total_result',
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
                         ]
         
         # Verificar existência das colunas
@@ -823,9 +862,13 @@ class RNADataAnalyzer:
         - DataFrame com coeficiente de variação (std/mean) por grupo e variável
         """
         if variables is None:
-            variables = ['PLOAD_cenario', 'PGWIND_disponivel_cenario',
-                         'BESS_init_cenario', 'CURTAILMENT_total_result',
-                         'BESS_operation_result']
+            variables = ['PLOAD_cenario',
+                         'PGWIND_disponivel_cenario',
+                         'CURTAILMENT_total_result',
+                         'V_result',
+                         'PGER_UTE_result',
+                         'QGER_UTE_result'
+                        ]
         
         # Calcular média e desvio por grupo
         grouped_mean = self.df.groupby(group_col)[variables].mean()
