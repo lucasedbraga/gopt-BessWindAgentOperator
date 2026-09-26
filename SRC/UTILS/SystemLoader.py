@@ -14,10 +14,10 @@ class SistemaLoader:
         self.linhas = []
         self.baterias_data = []
 
-        self.SB = 100.0  # Potência base
-        self.VB = 230.0  # Tensão base
-        self.f_base = 60.0  # Frequência base
-        self.ZB = 0.0  # Impedância base
+        self.SB = 1.0  # Potência base
+        self.f_base = 1.0  # Frequência base
+        self.VB = 1.0  # Tensão base
+        self.ZB = 1.0  # Impedância base
 
         # Estruturas processadas
         self.bus_ids = []
@@ -35,29 +35,31 @@ class SistemaLoader:
         self.FLIM = np.array([])
 
         # --- Geradores convencionais (UTE, UTH) ---
-        self.NGER_CONV = 0
-        self.BARPG_CONV = []          # índices das barras dos convencionais
-        self.GER_TIPOS_CONV = []      # tipos ("UTE", "UTH", etc.)
-        self.PGMIN_CONV = np.array([])
-        self.PGMAX_CONV = np.array([])
-        self.CPG_CONV = np.array([])
+        self.NGER_UTE = 0
+        self.BAR_PGER_UTE = []          # índices das barras dos convencionais
+        self.GER_TIPO = []      # tipos ("UTE", "UTH", etc.)
+        self.PGER_MIN = np.array([])
+        self.PGER_MAX = np.array([])
+        self.QGER_MIN = np.array([])
+        self.QGER_MAX = np.array([])
+        self.custo_GER = np.array([])
         self.RAMP_UP = np.array([])
         self.RAMP_DOWN = np.array([])
-        self.PGER_INICIAL_CONV = np.array([])   # geração inicial (pu)
+        self.PGER_INICIAL_UTE = np.array([])   # geração inicial (pu)
 
         # --- Geradores eólicos (GWD) ---
-        self.NGER_EOL = 0
+        self.NGER_GWD = 0
         self.BARPG_EOL = []            # índices das barras dos eólicos
-        self.PGMAX_EOL_ORIGINAL = np.array([])   # capacidade instalada (pu)
-        self.PGMAX_EOL_EFETIVO = np.array([])    # após fator de vento (pu)
+        self.PGWD_MAX_ORIGINAL = np.array([])   # capacidade instalada (pu)
+        self.PGWD_MAX_EFETIVO = np.array([])    # após fator de vento (pu)
         self.PGWIND_disponivel = np.array([])    # disponibilidade atual (pu) – igual ao efetivo
-        self.CPG_CURTAILMENT = np.array([])      # custo de curtailment por eólico (USD/pu)
+        self.custo_curtailment = np.array([])      # custo de curtailment por eólico (USD/pu)
 
         # Mapeamento auxiliar: índice global do gerador no JSON -> posição na lista de eólicos
         self.gwd_idx_to_pos = {}
 
         # --- Déficit (por barra) ---
-        self.CPG_DEFICIT = 5000.0 * self.SB   # custo do déficit (USD/pu), pode ser escalar
+        self.custo_DEFICIT  = 5000.0 * self.SB   # custo do déficit (USD/pu), pode ser escalar
 
         # Carga
         self.PLOAD = np.array([])
@@ -87,26 +89,29 @@ class SistemaLoader:
         self.ZB = (self.VB ** 2) / self.SB
 
         # Processa em PU
-        self.processa_pu()
+        #self.processa_pu()
 
         # Processa barras
-        self.processa_barras()
+        self.processa_BARRAS()
 
         # Processa linhas
-        self.processa_linhas()
+        self.processa_LINHAS()
 
-        # Processa geradores (separando convencionais e eólicos)
-        self.processa_geradores()
+        # Processa geradores
+        self.processa_GER()
 
         # Processa carga
-        self.processa_carga()
+        self.processa_LOAD()
 
-        # Processa déficit e curtailment (não cria geradores artificiais, apenas define custos)
-        self.processa_def_gwd()
+        # Processa déficit
+        self.processa_DEFICT()
+
+        # Processa gwd e curtailment
+        self.processa_GWD()
 
         # Processa baterias (se houver)
         if len(self.baterias_data) > 0:
-            self.processa_baterias()
+            self.processa_BESS()
         else:
             self.BARRAS_COM_BATERIA = []
             self.BATTERIES = []
@@ -115,7 +120,8 @@ class SistemaLoader:
             self.BATTERY_CAPACITY = np.zeros(self.NBAR)
             self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
             self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
-            self.BATTERY_COST = np.zeros(self.NBAR)
+            self.BATTERY_COST_CHARGE = np.zeros(self.NBAR)
+            self.BATTERY_COST_DISCHARGE = np.zeros(self.NBAR)
 
     def processa_pu(self):
         """Converte todos os valores para PU"""
@@ -126,19 +132,19 @@ class SistemaLoader:
 
         # Geradores
         for g in self.geradores_data:
-            g["PGERmin_pu"] = g.get("PGERmin_MW", 0.0) / self.SB
-            g["PGERmax_pu"] = g.get("PGERmax_MW", 0.0) / self.SB
-            g["Qmin_pu"] = g.get("Qmin_MW", 0.0) / self.SB
-            g["Qmax_pu"] = g.get("Qmax_MW", 0.0) / self.SB
+            g["PGER_MIN"] = g.get("PGER_MIN", 0.0) / self.SB
+            g["PGER_MAX"] = g.get("PGER_MAX", 0.0) / self.SB
+            g["QGER_MIN"] = g.get("QGER_MIN", 0.0) / self.SB
+            g["QGER_MAX"] = g.get("QGER_MAX", 0.0) / self.SB
 
             # Custos em USD/pu
-            g["custo_var_pu"] = g.get("custo_var_USD_MW", 0.0) * self.SB
-            g["custo_curtailment_pu"] = g.get("custo_curtailment_USD_MW", 100.0) * self.SB
+            g["CustoGeracao"] = g.get("custo_GER", 0.0) * self.SB
+            g["CustoCurtailment"] = g.get("custo_curtailment", 100.0) * self.SB
 
         # Demandas
         for d in self.demandas_data:
-            d["PLOAD_pu"] = d.get("PLOAD", 0.0) / self.SB
-            d["QLOAD_pu"] = d.get("QLOAD_MW", 0.0) / self.SB
+            d["PLOAD"] = d.get("PLOAD", 0.0) / self.SB
+            d["QLOAD"] = d.get("QLOAD", 0.0) / self.SB
 
         # Linhas
         for l in self.linhas:
@@ -154,7 +160,7 @@ class SistemaLoader:
             else:
                 l["Fmax_pu"] = l["LIM_Fluxo"]
 
-    def processa_barras(self):
+    def processa_BARRAS(self):
         """Processa dados das barras"""
         self.bus_ids = [b["ID_Barra"] for b in self.barras]
         self.idx_map = {id: i for i, id in enumerate(self.bus_ids)}
@@ -168,7 +174,7 @@ class SistemaLoader:
         slack_id = slack_list[0]["ID_Barra"]
         self.slack_idx = self.idx_map[slack_id]
 
-    def processa_linhas(self):
+    def processa_LINHAS(self):
         """Processa dados das linhas"""
         self.NLIN = len(self.linhas)
 
@@ -188,21 +194,99 @@ class SistemaLoader:
             self.r_line[e] = ln.get("R", 0.001)
             self.FLIM[e] = ln.get("Fmax_pu", 1.0)
 
-    def processa_geradores(self):
+    def processa_GER(self):
         """
-        Separa os geradores em convencionais (UTE, UTH) e eólicos (GWD).
+        Separa os geradores em convencionais (UTE, UTH)
         Preenche os arrays correspondentes.
         """
         # Listas temporárias para convencionais
-        barpg_conv = []
+        BAR_PGER_UTE = []
         tipos_conv = []
-        pgmin_conv = []
-        pgmax_conv = []
-        cpg_conv = []
-        ramp_up_MW_h = []
-        ramp_down_MW_h = []
+        PGER_MIN_UTE = []
+        PGER_MAX_UTE = []
+        QGER_MIN_UTE = []
+        QGER_MAX_UTE = []
+        V_ESP_BUS = []
+        custo_GER = []
+        P_ramp_up = []
+        P_ramp_down = []
         pg_inicial_conv = []  # geração inicial (pu)
 
+        # Itera sobre todos os geradores do JSON
+        for i, g in enumerate(self.geradores_data):
+            id_barra = g["ID_Barra"]
+            barra_idx = self.idx_map[id_barra]
+            tipo = g.get("Tipo", "CONV")
+
+            if tipo != "GWD":
+                # Gerador convencional
+                BAR_PGER_UTE.append(barra_idx)
+                tipos_conv.append(tipo)
+                PGER_MIN_UTE.append(g.get("PGER_MIN", 0.0))
+                PGER_MAX_UTE.append(g.get("PGER_MAX", 1.0))
+                QGER_MIN_UTE.append(g.get("QGER_MIN", 0.0))
+                QGER_MAX_UTE.append(g.get("QGER_MAX", 0.0))
+                custo_GER.append(g.get("CustoGeracao", 50.0))
+                P_ramp_up.append(g.get("P_ramp_up", 100))
+                P_ramp_down.append(g.get("P_ramp_down", 100))
+                # Geração inicial: campo opcional, se não existir, assume 0.0
+                pg_ini_mw = g.get("PGER_inicial", 0.0)
+                pg_inicial_conv.append(pg_ini_mw / self.SB)
+                if tipo == "SINC":
+                    V_ESP_BUS.append((barra_idx,1))
+                else:
+                    V_ESP_BUS.append(0)
+
+        # Converte para arrays numpy
+        self.NGER_UTE = len(BAR_PGER_UTE)
+        self.BAR_PGER_UTE = BAR_PGER_UTE
+        self.GER_TIPO = tipos_conv
+        self.PGER_MIN_UTE = np.array(PGER_MIN_UTE)
+        self.PGER_MAX_UTE = np.array(PGER_MAX_UTE)
+        self.QGER_MIN_UTE = np.array(QGER_MIN_UTE)
+        self.QGER_MAX_UTE = np.array(QGER_MAX_UTE)
+        self.V_ESP_BUS = V_ESP_BUS
+        self.custo_GER = np.array(custo_GER)
+        self.RAMP_UP = np.array(P_ramp_up)
+        self.RAMP_DOWN = np.array(P_ramp_down)
+        self.PGER_INICIAL_UTE = np.array(pg_inicial_conv)
+
+        print(f"  ✓ Geradores processados: {self.NGER_UTE} UTE")
+
+    def processa_LOAD(self):
+        """Processa dados de carga"""
+        self.PLOAD = np.zeros(self.NBAR)
+        self.QLOAD = np.zeros(self.NBAR)
+
+        for d in self.demandas_data:
+            idx = self.idx_map[d["ID_Barra"]]
+            self.PLOAD[idx] += d.get("PLOAD", 0.0)
+            self.QLOAD[idx] += d.get("QLOAD", 0.0)
+    
+    def processa_DEFICT(self):
+        """
+        Define as barras que podem ter déficit (PQ sem gerador convencional)
+        e o custo do déficit. Não cria geradores artificiais.
+        O déficit será modelado como variável por barra no OPF.
+        """
+        # Barras PQ
+        barras_PQ = [b for b in self.barras if b["tipo"] == "PQ"]
+        # Barras que possuem gerador convencional
+        barras_com_gerador_conv = set(self.BAR_PGER_UTE)
+        # Barras PQ sem gerador convencional (passíveis de déficit)
+        self.barras_PQ_sem_gerador = []
+        for b in barras_PQ:
+            idx = self.idx_map[b["ID_Barra"]]
+            if idx not in barras_com_gerador_conv:
+                self.barras_PQ_sem_gerador.append(b)
+
+        # Custo do déficit (pode ser um vetor, mas usamos um escalar por simplicidade)
+        # Se quiser por barra, pode ser um array do tamanho NBAR
+        self.custo_DEFICIT  = 5000.0 * self.SB  # USD/pu
+
+        print(f"  ✓ Déficit: {len(self.barras_PQ_sem_gerador)} barras PQ sem gerador convencional")
+
+    def processa_GWD(self):
         # Listas temporárias para eólicos
         barpg_eol = []
         pgmax_eol_orig = []
@@ -218,78 +302,21 @@ class SistemaLoader:
                 # Gerador eólico
                 pos = len(barpg_eol)
                 barpg_eol.append(barra_idx)
-                pgmax_orig = g.get("PGERmax_pu", 0.0)
+                pgmax_orig = g.get("PGER_MAX", 0.0)
                 pgmax_eol_orig.append(pgmax_orig)
-                custo_curtail.append(g.get("custo_curtailment_pu", 1000.0))
+                custo_curtail.append(g.get("custo_curtailment", 1000.0))
                 self.gwd_idx_to_pos[i] = pos  # mapeia índice global para posição na lista de eólicos
-            else:
-                # Gerador convencional
-                barpg_conv.append(barra_idx)
-                tipos_conv.append(tipo)
-                pgmin_conv.append(g.get("PGERmin_pu", 0.0))
-                pgmax_conv.append(g.get("PGERmax_pu", 1.0))
-                cpg_conv.append(g.get("custo_var_pu", 50.0))
-                ramp_up_MW_h.append(g.get("ramp_up_MW_h", 100))
-                ramp_down_MW_h.append(g.get("ramp_down_MW_h", 100))
-                # Geração inicial: campo opcional, se não existir, assume 0.0
-                pg_ini_mw = g.get("PGER_inicial_MW", 0.0)
-                pg_inicial_conv.append(pg_ini_mw / self.SB)
-
-        # Converte para arrays numpy
-        self.NGER_CONV = len(barpg_conv)
-        self.BARPG_CONV = barpg_conv
-        self.GER_TIPOS_CONV = tipos_conv
-        self.PGMIN_CONV = np.array(pgmin_conv)
-        self.PGMAX_CONV = np.array(pgmax_conv)
-        self.CPG_CONV = np.array(cpg_conv)
-        self.RAMP_UP = np.array(ramp_up_MW_h)
-        self.RAMP_DOWN = np.array(ramp_down_MW_h)
-        self.PGER_INICIAL_CONV = np.array(pg_inicial_conv)
-
-        self.NGER_EOL = len(barpg_eol)
+        
+        self.NGER_GWD = len(barpg_eol)
         self.BARPG_EOL = barpg_eol
-        self.PGMAX_EOL_ORIGINAL = np.array(pgmax_eol_orig)
-        self.PGMAX_EOL_EFETIVO = self.PGMAX_EOL_ORIGINAL.copy()  # inicialmente igual à original
-        self.PGWIND_disponivel = self.PGMAX_EOL_EFETIVO.copy()   # disponibilidade atual (será atualizada)
-        self.CPG_CURTAILMENT = np.array(custo_curtail)
+        self.PGWD_MAX_ORIGINAL = np.array(pgmax_eol_orig)
+        self.PGWD_MAX_EFETIVO = self.PGWD_MAX_ORIGINAL.copy()  # inicialmente igual à original
+        self.PGWIND_disponivel = self.PGWD_MAX_EFETIVO.copy()   # disponibilidade atual (será atualizada)
+        self.custo_curtailment = np.array(custo_curtail)
 
-        print(f"  ✓ Geradores processados: {self.NGER_CONV} convencionais, {self.NGER_EOL} eólicos")
+        print(f"  ✓ Geradores processados: {self.NGER_GWD} GWD")
 
-    def processa_carga(self):
-        """Processa dados de carga"""
-        self.PLOAD = np.zeros(self.NBAR)
-        self.QLOAD = np.zeros(self.NBAR)
-
-        for d in self.demandas_data:
-            idx = self.idx_map[d["ID_Barra"]]
-            self.PLOAD[idx] += d.get("PLOAD_pu", 0.0)
-            self.QLOAD[idx] += d.get("QLOAD_pu", 0.0)
-
-    def processa_def_gwd(self):
-        """
-        Define as barras que podem ter déficit (PQ sem gerador convencional)
-        e o custo do déficit. Não cria geradores artificiais.
-        O déficit será modelado como variável por barra no OPF.
-        O curtailment está associado aos geradores eólicos.
-        """
-        # Barras PQ
-        barras_PQ = [b for b in self.barras if b["tipo"] == "PQ"]
-        # Barras que possuem gerador convencional
-        barras_com_gerador_conv = set(self.BARPG_CONV)
-        # Barras PQ sem gerador convencional (passíveis de déficit)
-        self.barras_PQ_sem_gerador = []
-        for b in barras_PQ:
-            idx = self.idx_map[b["ID_Barra"]]
-            if idx not in barras_com_gerador_conv:
-                self.barras_PQ_sem_gerador.append(b)
-
-        # Custo do déficit (pode ser um vetor, mas usamos um escalar por simplicidade)
-        # Se quiser por barra, pode ser um array do tamanho NBAR
-        self.CPG_DEFICIT = 5000.0 * self.SB  # USD/pu
-
-        print(f"  ✓ Déficit: {len(self.barras_PQ_sem_gerador)} barras PQ sem gerador convencional")
-
-    def processa_baterias(self):
+    def processa_BESS(self):
         """Processa dados de baterias"""
         self.BARRAS_COM_BATERIA = []
 
@@ -304,7 +331,8 @@ class SistemaLoader:
         self.BATTERY_CAPACITY = np.zeros(self.NBAR)
         self.BATTERY_MIN_SOC = np.zeros(self.NBAR)
         self.BATTERY_INITIAL_SOC = np.zeros(self.NBAR)
-        self.BATTERY_COST = np.zeros(self.NBAR)
+        self.BATTERY_COST_CHARGE = np.zeros(self.NBAR)
+        self.BATTERY_COST_DISCHARGE = np.zeros(self.NBAR)
 
         for bat in self.baterias_data:
             id_barra = str(bat["ID_Barra"])
@@ -318,19 +346,20 @@ class SistemaLoader:
             if "Pmax_carga_base_pu" in bat:
                 p_max_carga = bat["Pmax_carga_base_pu"]
             else:
-                p_max_carga = bat.get("Pmax_carga_MW", 0.0) / self.SB
+                p_max_carga = bat.get("Pmax_carga", 0.0) / self.SB
 
             if "capacidade_base_pu" in bat:
                 capacidade = bat["capacidade_base_pu"]
             else:
-                capacidade = bat.get("capacidade_armazenamento_MWh", 0.0) / self.SB
+                capacidade = bat.get("capacidade_armazenamento", 0.0) / self.SB
 
             BATmax_in_base[idx] = p_max_carga
             BATmax_out_base[idx] = bat.get("Pmax_descarga_pu", p_max_carga)
             BATcapacidade_base[idx] = capacidade
             BATarm_inicial_base[idx] = bat.get("SOC_inicial_pu", 0.5) * capacidade
             BATminSoc_base[idx] = bat.get("min_soc_pu", 0.1) * capacidade
-            self.BATTERY_COST[idx] = bat.get("custo_operacao_pu", 10.0)
+            self.BATTERY_COST_CHARGE[idx] = bat.get("custo_carga", 10.0)
+            self.BATTERY_COST_DISCHARGE[idx] = bat.get("custo_descarga", 10.0)
 
         self.BATTERY_POWER_LIMIT = BATmax_in_base.copy()
         self.BATTERY_POWER_OUT = BATmax_out_base.copy()
@@ -344,11 +373,11 @@ class SistemaLoader:
     def atualizar_perfil_eolico(self, fator_vento: float):
         """
         Atualiza a capacidade eólica efetiva com base no fator de vento.
-        PGMAX_EOL_EFETIVO = PGMAX_EOL_ORIGINAL * fator_vento
-        PGWIND_disponivel = PGMAX_EOL_EFETIVO (disponibilidade atual)
+        PGWD_MAX_EFETIVO = PGWD_MAX_ORIGINAL * fator_vento
+        PGWIND_disponivel = PGWD_MAX_EFETIVO (disponibilidade atual)
         """
-        self.PGMAX_EOL_EFETIVO = self.PGMAX_EOL_ORIGINAL * fator_vento
-        self.PGWIND_disponivel = self.PGMAX_EOL_EFETIVO.copy()
+        self.PGWD_MAX_EFETIVO = self.PGWD_MAX_ORIGINAL * fator_vento
+        self.PGWIND_disponivel = self.PGWD_MAX_EFETIVO.copy()
         print(f"  ✓ Perfil eólico atualizado: fator={fator_vento:.3f}")
 
     def get_sistema_dict(self) -> Dict:
@@ -376,28 +405,28 @@ class SistemaLoader:
             'FLIM': self.FLIM,
 
             # Geradores convencionais
-            'NGER_CONV': self.NGER_CONV,
-            'BARPG_CONV': self.BARPG_CONV,
-            'GER_TIPOS_CONV': self.GER_TIPOS_CONV,
-            'PGMIN_CONV': self.PGMIN_CONV,
-            'PGMAX_CONV': self.PGMAX_CONV,
-            'CPG_CONV': self.CPG_CONV,
+            'NGER_UTE': self.NGER_UTE,
+            'BAR_PGER_UTE': self.BAR_PGER_UTE,
+            'GER_TIPO': self.GER_TIPO,
+            'PGER_MIN_UTE': self.PGER_MIN_UTE,
+            'PGER_MAX_UTE': self.PGER_MAX_UTE,
+            'custo_GER': self.custo_GER,
             'RAMP_UP': self.RAMP_UP,
             'RAMP_DOWN': self.RAMP_DOWN,
-            'PGER_INICIAL_CONV': self.PGER_INICIAL_CONV,
+            'PGER_INICIAL_UTE': self.PGER_INICIAL_UTE,
 
             # Geradores eólicos
-            'NGER_EOL': self.NGER_EOL,
+            'NGER_GWD': self.NGER_GWD,
             'BARPG_EOL': self.BARPG_EOL,
-            'PGMAX_EOL_ORIGINAL': self.PGMAX_EOL_ORIGINAL,
-            'PGMAX_EOL_EFETIVO': self.PGMAX_EOL_EFETIVO,
+            'PGWD_MAX_ORIGINAL': self.PGWD_MAX_ORIGINAL,
+            'PGWD_MAX_EFETIVO': self.PGWD_MAX_EFETIVO,
             'PGWIND_disponivel': self.PGWIND_disponivel,
-            'CPG_CURTAILMENT': self.CPG_CURTAILMENT,
+            'custo_curtailment': self.custo_curtailment,
             'gwd_idx_to_pos': self.gwd_idx_to_pos,
 
             # Déficit
             'barras_PQ_sem_gerador': self.barras_PQ_sem_gerador,
-            'CPG_DEFICIT': self.CPG_DEFICIT,
+            'custo_DEFICIT ': self.custo_DEFICIT ,
 
             # Carga
             'PLOAD': self.PLOAD,

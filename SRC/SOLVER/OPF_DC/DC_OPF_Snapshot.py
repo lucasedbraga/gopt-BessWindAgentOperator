@@ -67,7 +67,7 @@ class DCOPFSnapshot:
         self.n_line = s.NLIN
         self.n_battery = len(getattr(s, 'BARRAS_COM_BATERIA', []))
 
-        self.thermal_bus = np.array(s.BARPG_CONV, dtype=int)
+        self.thermal_bus = np.array(s.BAR_PGER_UTE, dtype=int)
         self.wind_bus = np.array(getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [])), dtype=int)
 
         self.line_from = np.array(s.line_fr, dtype=int)
@@ -76,8 +76,8 @@ class DCOPFSnapshot:
         self.line_r = np.array(s.r_line, dtype=float) if hasattr(s, 'r_line') else np.zeros(self.n_line)
         self.line_flow_max = np.array(s.FLIM, dtype=float)
 
-        self.thermal_pmin = np.array(s.PGMIN_CONV, dtype=float)
-        self.thermal_pmax = np.array(s.PGMAX_CONV, dtype=float)
+        self.thermal_pmin = np.array(s.PGER_MIN_UTE, dtype=float)
+        self.thermal_pmax = np.array(s.PGER_MAX_UTE, dtype=float)
         self.thermal_cost = np.array(getattr(s, 'CUSTO_GER', [50.0] * self.n_thermal), dtype=float)
 
         self.battery_buses = np.array(getattr(s, 'BARRAS_COM_BATERIA', []), dtype=int)
@@ -298,11 +298,11 @@ class DCOPFSnapshot:
                 T=1,
                 NGER_CONV=self.n_thermal,
                 PGER=self.PGER_dict,
-                pgmin_conv=self.thermal_pmin,
-                pgmax_conv=self.thermal_pmax,
-                pger_inicial_conv=self.sistema.PGER_INICIAL_CONV,  # array em pu
-                ramp_up_mw=self.sistema.RAMP_UP,
-                ramp_down_mw=self.sistema.RAMP_DOWN,
+                PGER_MIN_UTE=self.thermal_pmin,
+                PGER_MAX_UTE=self.thermal_pmax,
+                PGER_INICIAL_UTE=self.sistema.PGER_INICIAL_UTE,  # array em pu
+                RAMP_UP=self.sistema.RAMP_UP,
+                RAMP_DOWN=self.sistema.RAMP_DOWN,
                 SB=self.sistema.SB
             )
 
@@ -398,7 +398,7 @@ class DCOPFSnapshot:
             caller_frame = frame.f_back
             caller_filename = caller_frame.f_code.co_filename
             base = os.path.splitext(os.path.basename(caller_filename))[0]
-            lp_filename = f"DATA/output/{base}_snapshot.lp"
+            lp_filename = f"DATA/output_CUR_Oficial/{base}_snapshot.lp"
             os.makedirs(os.path.dirname(lp_filename), exist_ok=True)
             self.model.write(lp_filename)
             print(f"Modelo escrito em {lp_filename}")
@@ -637,7 +637,7 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee33_BASE.json"
+    json_path = "DATA/input/ieee118_BASE.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -655,7 +655,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     print("\n2. Configurando banco de dados...")
     
-    db_handler = OPF_DBHandler('DATA/output/resultados_snapshot.db')
+    db_handler = OPF_DBHandler('DATA/output_CUR_Oficial/resultados_snapshot.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S') + "_snapshot"
     print(f"   ✓ Cenário ID: {cen_id}")
@@ -672,7 +672,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 4. Definir parâmetros para uma hora específica
     # -------------------------------------------------------------------------
-    hora_desejada = 17
+    hora_desejada = 0
 
     seed = secrets.randbits(32)
     from UTILS.EvaluateFactors import EvaluateFactors

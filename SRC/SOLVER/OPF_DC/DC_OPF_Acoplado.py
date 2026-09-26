@@ -234,8 +234,8 @@ class TimeCoupledOPFModel:
         for t in range(self.horizon_time):
             for g in range(s.NGER_CONV):
                 self.PGER[t, g] = self.model.add_variable(
-                    lb=s.PGMIN_CONV[g],          # pu
-                    ub=s.PGMAX_CONV[g],          # pu
+                    lb=s.PGER_MIN_UTE[g],          # pu
+                    ub=s.PGER_MAX_UTE[g],          # pu
                     name=f"PGER_{t}_{g}"
                 )
 
@@ -359,11 +359,11 @@ class TimeCoupledOPFModel:
             T=T,
             NGER_CONV=s.NGER_CONV,
             PGER=self.PGER,
-            pgmin_conv=s.PGMIN_CONV,
-            pgmax_conv=s.PGMAX_CONV,
-            pger_inicial_conv=s.PGER_INICIAL_CONV,
-            ramp_up_mw=s.RAMP_UP,
-            ramp_down_mw=s.RAMP_DOWN,
+            PGER_MIN_UTE=s.PGER_MIN_UTE,
+            PGER_MAX_UTE=s.PGER_MAX_UTE,
+            PGER_INICIAL_UTE=s.PGER_INICIAL_UTE,
+            RAMP_UP=s.RAMP_UP,
+            RAMP_DOWN=s.RAMP_DOWN,
             SB=s.SB
         )
 
@@ -374,13 +374,13 @@ class TimeCoupledOPFModel:
                 sistema=s,
                 T=T,
                 battery_list=self._battery_list,
-                battery_index=self._battery_index,
                 CHARGE=self.CHARGE,
                 DISCHARGE=self.DISCHARGE,
                 SOC=self.SOC,
                 BatteryOperation=self.BatteryOperation,
                 soc_inicial_list=self._soc_inicial_list,
-                soc_final_list=self._soc_final_list if self._soc_final_list else None
+                soc_final_list=self._soc_final_list if self._soc_final_list else None,
+                daily_reset_to_initial=True 
             )
 
         # 3. Geradores eólicos
@@ -412,7 +412,7 @@ class TimeCoupledOPFModel:
             DEFICIT=self.DEFICIT,
             PLOAD=self.PLOAD,
             PGER=self.PGER,
-            conv_gen_to_bar=s.BARPG_CONV,
+            conv_gen_to_bar=s.BAR_PGER_UTE,
             PGWIND=self.PGWIND if s.NGER_EOL > 0 else None,
             wind_gen_to_bar=wind_gen_to_bar,
             CHARGE=self.CHARGE if self._battery_list else None,
@@ -436,7 +436,7 @@ class TimeCoupledOPFModel:
             # Custo térmico (USD/pu)
             for t in range(self.horizon_time):
                 for g in range(self.sistema.NGER_CONV):
-                    custo = float(self.sistema.CPG_CONV[g])          # garantir escalar
+                    custo = 1 #float(self.sistema.CPG_CONV[g])          # garantir escalar
                     expr += custo * self.PGER[t, g]
 
             # Déficit
@@ -487,7 +487,6 @@ class TimeCoupledOPFModel:
 
     def solve_iterative(self, solver_name: str = 'highs', tol: float = 1e-4,
                         max_iter: int = 50, write_lp: bool = True, **solver_args):
-        """Resolve o modelo com iterações de perdas (ponto fixo)."""
         if not self.considerar_perdas:
             return self.solve(solver_name, write_lp=write_lp, **solver_args)
 
@@ -499,19 +498,18 @@ class TimeCoupledOPFModel:
             print("Primeira iteração: solução não ótima.")
             return raw
 
-        ang_prev = np.array([[self.model.get_value(self.ANG[t, b])
-                               for b in range(self.sistema.NBAR)]
-                              for t in range(self.horizon_time)])
-
+        # Inicializar valores anteriores
+        perdas_prev = self._perdas_calculadas.copy()
         for it in range(1, max_iter):
-            perdas = self.calculate_losses()
-            self.update_losses(perdas)
+            # Calcular perdas com base na solução atual
+            perdas_atuais = self.calculate_losses()
+            self.update_losses(perdas_atuais)
 
             # Remover restrições de balanço antigas
             for _, _, constr in self.balance_constraints:
                 self.model.delete_constraint(constr)
 
-            # Recriar restrições de balanço com novas perdas
+            # Recriar restrições com as novas perdas
             s = self.sistema
             T = self.horizon_time
             wind_gen_to_bar = getattr(s, 'bus_wind', getattr(s, 'BARPG_EOL', [0]*s.NGER_EOL))
@@ -524,31 +522,38 @@ class TimeCoupledOPFModel:
                 DEFICIT=self.DEFICIT,
                 PLOAD=self.PLOAD,
                 PGER=self.PGER,
-                conv_gen_to_bar=s.BARPG_CONV,
+                conv_gen_to_bar=s.BAR_PGER_UTE,
                 PGWIND=self.PGWIND if s.NGER_EOL > 0 else None,
                 wind_gen_to_bar=wind_gen_to_bar,
                 CHARGE=self.CHARGE if self._battery_list else None,
                 DISCHARGE=self.DISCHARGE if self._battery_list else None,
                 battery_list=self._battery_list,
-                PERDAS_BARRA=perdas,
+                PERDAS_BARRA=perdas_atuais,
                 considerar_perdas=self.considerar_perdas
             )
 
+            # Resolver novamente
             raw = self.solve(solver_name, write_lp=False, **solver_args)
             if not self._solved or self.model.get_model_attribute(
                     poi.ModelAttribute.TerminationStatus) != poi.TerminationStatusCode.OPTIMAL:
                 print(f"Iteração {it+1}: solução não ótima.")
                 break
 
-            ang_curr = np.array([[self.model.get_value(self.ANG[t, b])
-                                   for b in range(self.sistema.NBAR)]
-                                  for t in range(self.horizon_time)])
-            diff = np.max(np.abs(ang_curr - ang_prev))
-            print(f"Iteração {it+1}: diff = {diff:.6f}")
-            if diff < tol:
+            # Calcular diferenças
+            diff_perdas = np.max(np.abs(perdas_atuais - perdas_prev))
+
+            print('-'*70)
+            print(f"Iteração {it+1}: diff_perdas = {diff_perdas:.6f}")
+            print('-'*70)
+
+            # Critério de convergência
+            if diff_perdas < tol:
                 print(f"Convergência alcançada na iteração {it+1}.")
                 break
-            ang_prev = ang_curr.copy()
+
+            perdas_prev = perdas_atuais.copy()
+        else:
+            print("Número máximo de iterações atingido sem convergência.")
 
         return raw
 
@@ -562,7 +567,7 @@ class TimeCoupledOPFModel:
             caller_frame = frame.f_back
             caller_filename = caller_frame.f_code.co_filename
             base = os.path.splitext(os.path.basename(caller_filename))[0]
-            lp_filename = f"DATA/output/{base}_timecoupled.lp"
+            lp_filename = f"DATA/output_CUR_Oficial/{base}_timecoupled.lp"
             os.makedirs(os.path.dirname(lp_filename), exist_ok=True)
             self.model.write(lp_filename)
             print(f"Modelo escrito em {lp_filename}")
@@ -617,7 +622,7 @@ class TimeCoupledOPFModel:
                             soc_init_val = self._soc_inicial_list[i]
                         else:
                             soc_init_val = self.model.get_value(self.SOC[t-1, b])
-                        SOC_init[b] = soc_init_val   # MWh
+                        SOC_init[b] = soc_init_val
 
                         # SOC atual (após o período)
                         soc_atual_val = self.model.get_value(self.SOC[t, b])
@@ -755,7 +760,9 @@ if __name__ == "__main__":
     # 1. Carregar sistema
     # -------------------------------------------------------------------------
     print("\n1. Carregando dados do sistema...")
-    json_path = "DATA/input/ieee33_BASE.json"
+    #json_path = "DATA/input/ieee14_BASE.json"
+    json_path = "DATA/input/ieee118_BASE.json"
+    #json_path = "DATA/input/ieee14_BESS.json"
     if not os.path.exists(json_path):
         print(f"ERRO: Arquivo não encontrado: {json_path}")
         sys.exit(1)
@@ -772,7 +779,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 2. Parâmetros da simulação
     # -------------------------------------------------------------------------
-    n_dias = 7
+    n_dias = 1
     n_horas = 24
     T = n_dias * n_horas
     print(f"\n2. Simulando {n_dias} dias x {n_horas} horas = {T} períodos.")
@@ -787,7 +794,7 @@ if __name__ == "__main__":
     # 4. Configurar banco de dados
     # -------------------------------------------------------------------------
     print("\n3. Configurando banco de dados...")
-    db_handler = OPF_DBHandler('DATA/output/resultados_PL_acoplado.db')
+    db_handler = OPF_DBHandler('DATA/output_CUR_Oficial/resultados_PL_acoplado.db')
     db_handler.create_tables()
     cen_id = datetime.now().strftime('%Y%m%d%H%M%S')
     print(f"   ✓ Cenário ID: {cen_id}")
@@ -800,7 +807,7 @@ if __name__ == "__main__":
         n_horas=n_horas,
         n_dias=n_dias,
         db_handler=db_handler,
-        considerar_perdas=True,
+        considerar_perdas=False,
         dia_inicial=0
     )
 
@@ -812,8 +819,8 @@ if __name__ == "__main__":
         sistema=sistema,
         n_dias=n_dias,
         n_horas=n_horas,
-        carga_incerteza=0.2,
-        vento_variacao=0.1,
+        carga_incerteza=0.05,
+        vento_variacao=0.9,
         seed=seed
     )
     fatores_carga, fatores_vento = avaliador.gerar_tudo()

@@ -17,7 +17,7 @@ import pandas as pd
 
 # ==================== CONFIGURAÇÕES ====================
 DB_PATH = "DATA/output/resultados_PL_acoplado.db"
-JSON_PATH = "DATA/input/3barras_BASE.json"
+JSON_PATH = "DATA/input/ieee14_BASE.json"
 TOL = 1e-4                     # tolerância para verificações
 
 # Se nenhum argumento for passado, use este cen_id (exemplo)
@@ -47,7 +47,7 @@ def obter_dados_cenario(db_path, cen_id):
                PLOAD_cenario,
                BESS_init_cenario,
                PGWIND_disponivel_cenario,
-               PGER_CONV_total_result,
+               PGER_UTE_result,
                CURTAILMENT_total_result,
                BESS_operation_result
         FROM DBAR_results
@@ -67,9 +67,9 @@ def mapear_recursos(sistema):
     """
     thermal_bars = {}   # barra -> dict de parâmetros agregados
     # Geradores térmicos
-    if hasattr(sistema, 'NGER_CONV') and sistema.NGER_CONV > 0:
-        for i in range(sistema.NGER_CONV):
-            bar = sistema.BARPG_CONV[i]
+    if hasattr(sistema, 'NGER_UTE') and sistema.NGER_UTE > 0:
+        for i in range(sistema.NGER_UTE):
+            bar = sistema.BAR_PGER_UTE[i]
             if bar not in thermal_bars:
                 thermal_bars[bar] = {
                     'pmax': 0.0,
@@ -79,8 +79,8 @@ def mapear_recursos(sistema):
                     'first_up': 0.0,
                     'first_down': 0.0
                 }
-            thermal_bars[bar]['pmax'] += sistema.PGMAX_CONV[i]
-            thermal_bars[bar]['pmin'] += sistema.PGMIN_CONV[i]
+            thermal_bars[bar]['pmax'] += sistema.PGER_MAX_UTE[i]
+            thermal_bars[bar]['pmin'] += sistema.PGER_MIN_UTE[i]
             thermal_bars[bar]['ramp_up'] += sistema.RAMP_UP[i]
             thermal_bars[bar]['ramp_down'] += sistema.RAMP_DOWN[i]
             # Para a primeira hora, usamos os mesmos limites de rampa (o sistema não fornece valores especiais)
@@ -89,7 +89,7 @@ def mapear_recursos(sistema):
 
     # Geradores eólicos (lista de barras, sem repetição)
     wind_bars = []
-    if hasattr(sistema, 'NGER_EOL') and sistema.NGER_EOL > 0:
+    if hasattr(sistema, 'NGER_GWD') and sistema.NGER_GWD > 0:
         wind_bars = sorted(set(sistema.BARPG_EOL))
 
     # Baterias
@@ -136,7 +136,7 @@ def validar_balanco_global(df, sistema, recursos, tol=TOL):
         df_h = df[df['hora_simulacao'] == hora]
 
         # Geração térmica (soma sobre todas as barras)
-        pger = df_h['PGER_CONV_total_result'].sum()
+        pger = df_h['PGER_UTE_result'].sum()
 
         # Geração eólica efetiva
         df_eol = df_h[df_h['BAR_id'].isin(recursos['wind'])]
@@ -174,7 +174,7 @@ def validar_geracao_termica(df, sistema, recursos, tol=TOL):
         if df_bar.empty:
             continue
         horas = df_bar['hora_simulacao'].values
-        pger = df_bar['PGER_CONV_total_result'].values
+        pger = df_bar['PGER_UTE_result'].values
 
         pmax = params['pmax']
         pmin = params['pmin']

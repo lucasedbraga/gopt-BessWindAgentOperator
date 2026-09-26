@@ -23,15 +23,17 @@ import matplotlib.pyplot as plt
 
 # ==================== CONFIGURAÇÕES ====================
 # Caminhos
-JSON_PATH = "../DATA/input/ieee33_BASE.json"
-DB_PATH = "../DATA/output/RNA_resultados_PL_acoplado.db"
-MODELS_DIR = "../DATA/output/modelos_especialistas_v4"
+JSON_PATH = "DATA/input/ieee14_BESS.json"
+DB_PATH = "DATA/output/RNA_DATA_PL_acoplado.db"
+MODELS_DIR = "DATA/output/modelos_especialistas_v4"
 
 # Horas para as quais existem modelos treinados e que queremos comparar
 HORAS_INTERESSE = [16, 17, 18]
 
 # Barras com medição (para create_wide_format)
-BARRAS_COM_MEDICAO = [3]
+#BARRAS_COM_MEDICAO = [3]
+BARRAS_COM_MEDICAO = [3, 5, 8]  # IEEE 14
+#BARRAS_COM_MEDICAO = [3, 5, 8, 17]  # IEEE 33
 
 # Parâmetros da geração de cenários (usados apenas se não for fornecido um cenário existente)
 N_ITERACOES = 1          # Vamos gerar apenas UM cenário
@@ -39,7 +41,7 @@ N_DIAS = 7
 N_HORAS = 24
 SOC_INICIAL_FRACAO = 0.5
 SOC_FINAL_FRACAO = 0.5
-CONSIDERAR_PERDAS = True
+CONSIDERAR_PERDAS = False
 SOLVER_NAME = 'highs'
 TOL = 1e-4
 MAX_ITER = 5
@@ -95,7 +97,7 @@ def load_data(db_path, cen_id=None):
                PLOAD_cenario,
                BESS_init_cenario,
                PGWIND_disponivel_cenario,
-               PGER_CONV_total_result,
+               PGER_UTE_result,
                CURTAILMENT_total_result,
                BESS_operation_result
         FROM DBAR_results
@@ -122,7 +124,7 @@ def create_wide_format(df, barras_com_medicao):
     df.loc[~mask_medido, 'PLOAD_estimado'] = df.loc[~mask_medido, 'PLOAD_cenario']
     
     pivot_cols = [
-        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_CONV_total_result',
+        'BESS_init_cenario', 'PGWIND_disponivel_cenario', 'PGER_UTE_result',
         'PLOAD_medido', 'PLOAD_estimado',
         'CURTAILMENT_total_result', 'BESS_operation_result'
     ]
@@ -137,12 +139,12 @@ def prepare_X_y(df_wide, remove_constants=True):
     """
     Separa features (X) e targets (y) a partir do DataFrame largo.
     X contém: BESS_init_cenario_BAR*, PGWIND_disponivel_cenario_BAR*,
-              PGER_CONV_total_result_BAR*, PLOAD_medido_BAR*
+              PGER_UTE_result_BAR*, PLOAD_medido_BAR*
     y contém: BESS_operation_result_BAR*, CURTAILMENT_total_result_BAR*, PLOAD_estimado_BAR*
     Remove linhas com NaN nas features.
     """
     feature_prefixes = ['BESS_init_cenario', 'PGWIND_disponivel_cenario',
-                        'PGER_CONV_total_result', 'PLOAD_medido']
+                        'PGER_UTE_result', 'PLOAD_medido']
     target_prefixes = ['BESS_operation_result', 'CURTAILMENT_total_result', 'PLOAD_estimado']
 
     feature_cols = [col for col in df_wide.columns if any(col.startswith(p) for p in feature_prefixes)]
@@ -386,12 +388,12 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
     width = 0.35
     
     fig, ax = plt.subplots(figsize=(max(10, len(target_names) * 0.5), 6))
-    bars1 = ax.bar(x - width/2, y_true.values, width, label='Real (otimizador)', color='steelblue')
+    bars1 = ax.bar(x - width/2, y_true.values, width, label='Otimizador (OPF)', color='steelblue')
     bars2 = ax.bar(x + width/2, y_pred, width, label='Previsto (RNA)', color='orange')
     
     ax.set_xlabel('Variável')
     ax.set_ylabel('Valor (MW)')
-    ax.set_title(f'Hora {hora:02d} - Comparação: Real vs RNA (todos os targets)')
+    ax.set_title(f'Hora {hora:02d} - Comparação: OPF vs RNA ')
     ax.set_xticks(x)
     ax.set_xticklabels(rotulos, rotation=45, ha='right')
     ax.legend()
@@ -421,7 +423,7 @@ def plot_comparacao_barras(resultados, hora, output_dir, save_fig):
 # ========== Função principal ==========
 def main():
     print("=" * 70)
-    print("COMPARAÇÃO RNA vs OTIMIZADOR - HORAS 16, 17 e 18")
+    print("COMPARAÇÃO RNA vs OPF - HORAS 16, 17 e 18")
     print("=" * 70)
 
     # 1. Carregar modelos
