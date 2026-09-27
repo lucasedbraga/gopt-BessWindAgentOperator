@@ -207,6 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 # Output data and results
+.token/*
+
 DATA/output/*
 IHM/PowerBalance.ipynb
 IHM/LinesOperation.ipynb

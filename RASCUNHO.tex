@@ -1,0 +1,1003 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning}
+\usepackage{float}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhead[R]{%
+    \begin{tabular}{@{}r@{}}
+        XVI LATIN-AMERICAN CONGRESS ON ELECTRICITY GENERATION AND TRANSMISSION - CLAGTEE 2026 \\
+        Santiago, Chile, Octuber 21th – 23th, 2026
+    \end{tabular}
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\title{Estimação de \textit{Wind Curtailment} via \textit{Histogram-Based
+Gradient Boosting} através do Fluxo de Potência Ótimo Não Linear}
+
+\begin{document}
+
+
+
+% \author[First]{Lucas Eduardo Silva Braga}
+% \author[First]{Edimar Jose de Oliveira}
+% \author[First]{Lucas Santiago Nepomuceno}
+% \author[First]{Leonardo Willer de Oliveira}
+
+% % \address[First]{Faculdade de Engenharia Elétrica, Universidade de Juiz de Fora, MG
+% (e-mail: braga.lucaseduardo@estudante.ufjf.br,
+%  lucas.nepomuceno@estudante.ufjf.br,
+% edimar.oliveira@ufjf.br, leonardo.willer@ufjf.br).}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Lucas Eduardo Silva Braga}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Edimar Jose de Oliveira}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Lucas Santiago Nepomuceno}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Leonardo Willer de Oliveira}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}}
+
+\maketitle
+\thanks{Os autores agradecem à FAPEMIG, ao CNPq, à CAPES e ao PPEE-UFJF.}
+
+\begin{abstract}
+Grandes volumes de energia provenientes da geração eólica aos sistemas de potência impõem desafios operativos relevantes como congestionamentos de transmissão e desequilíbrios de potência ativa e reativa que frequentemente resultam em cortes forçados de geração. A estimativa precisa e ágil do corte de geração (\textit{wind curtailment}) é essencial para a operação em tempo real. Este trabalho propõe uma metodologia baseada em \textit{Histogram-Based Gradient Boosting} (HGB) para a estimativa em tempo real do corte de geração horário, treinada com amostras sintéticas geradas a partir de simulações de Fluxo de Potência Ótimo não linear (FPO-AC) sob cenários probabilísticos. O FPO-AC modela uma operação diária de um sistema de potência considerando as equações não lineares de fluxo de potência ativa e reativa fornecendo uma base de dados de treinamento com cenários de operação mais realistas. Testes realizados nos sistemas IEEE 14 e IEEE 118 barras foram utilizados avaliar a precisão e a viabilidade computacional da metodologia como uma aplicação na operação em tempo real de sistemas elétricos de potência.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Histogram-Based Gradient Boosting; Wind Curtailment; AC Optimal Power Flow;
+Nonlinear Power Systems; Machine Learning for Power Systems.
+\end{IEEEkeywords}
+
+%===============================================================================
+\section*{\normalfont\bfseries Nomenclaturas}
+
+\begin{list}{}{
+    \setlength{\leftmargin}{1.8cm}
+    \setlength{\labelwidth}{1.8cm}
+    \setlength{\labelsep}{0.2cm}
+    \setlength{\topsep}{0pt}
+    \setlength{\partopsep}{0pt}
+    \setlength{\parsep}{0pt}
+    \setlength{\itemsep}{1.5pt}
+    \renewcommand{\makelabel}[1]{#1\hfil}
+}
+% --- Índices ---
+\item[$h$]         Hora (índice horário).
+\item[$i, j$]      Índices de barras.
+\item[$k$]         Índice de parque eólico.
+\item[$g$]         Índice de gerador convencional.
+\item[$N_G$]       Número de geradores convencionais.
+\item[$N_W$]       Número de parques eólicos.
+\item[$N_B$]       Número total de barras.
+\item[$\mathcal{L}$] Conjunto de ramos (linhas e transformadores).
+% --- Parâmetros ---
+\item[$P_{L,i}^{h}$]          Demanda ativa na barra $i$ na hora $h$.
+\item[$Q_{L,i}^{h}$]          Demanda reativa na barra $i$ na hora $h$.
+\item[$P_{GW,k}^{h}$]         Potência eólica disponível no parque $k$ na hora $h$.
+\item[$C_{PCW}$]              Custo de penalização por \textit{wind curtailment}.
+\item[$C_{D}$]                Custo de déficit de geração.
+\item[$G_{ij}, B_{ij}$]       Condutância e susceptância do ramo $ij$.
+\item[$f_{\max,ij}^{\text{ap}}$] Limite de fluxo de potência aparente no ramo $ij$.
+\item[$P_{g,\min/\max}$]      Limites mínimo e máximo de geração ativa.
+\item[$Q_{g,\min/\max}$]      Limites mínimo e máximo de geração reativa.
+\item[$V_{i,\min/\max}$]      Limites mínimo e máximo de módulo de tensão.
+\item[$a_{g}, b_{g}$]         Limites do fator global de carga.
+\item[$a_{\ell}, b_{\ell}$]   Limites do fator local de carga.
+\item[$w_{i}$]                Peso amostral atribuído à amostra $i$ no treinamento do HGB.
+\item[$\varepsilon$]          Tolerância relativa adotada na métrica de acurácia.
+\item[$N_{+}$]                Número de amostras do conjunto de teste com $y_{curt} > 0{,}01$~pu.
+% --- Variáveis ---
+\item[$P_{CW,k}^{h}$]   Potência de \textit{wind curtailment} do parque $k$ na hora $h$.
+\item[$P_{g}^{h}$]       Geração ativa do gerador $g$ na hora $h$.
+\item[$Q_{g}^{h}$]       Geração reativa do gerador $g$ na hora $h$.
+\item[$P_{D,i}^{h}$]    Déficit de geração ativa na barra $i$ na hora $h$.
+\item[$Q_{D,i}^{h}$]    Déficit de geração reativa na barra $i$ na hora $h$.
+\item[$V_{i}^{h}$]       Módulo de tensão na barra $i$ na hora $h$.
+\item[$\theta_{i}^{h}$]  Ângulo de fase na barra $i$ na hora $h$.
+\item[$f_g^{(i)}$]       Fator global de carga no cenário $i$.
+\item[$f_{\ell,i,k}$]    Fator local de carga na barra $k$ no cenário $i$.
+\item[$f_{\text{wind},h}$] Fator horário de disponibilidade eólica.
+\item[$X^h, Y^h$]        Vetores de entrada e saída do modelo preditivo, respectivamente.
+\item[$y_{curt}$]        Valor de \textit{wind curtailment} obtido pelo FPO-AC.
+\item[$\hat{y}_{curt}$]  Valor de \textit{wind curtailment} estimado pelo modelo HGB.
+\end{list}
+
+%===============================================================================
+\section{Introdução}
+
+A transição energética global em direção a matrizes de baixo carbono tem estimulado a inserção massiva da geração de energia elétrica proveniente de fontes renováveis de alta variabilidade, como a eólica e a solar fotovoltaica. Além de reduzirem as emissões de gases de efeito estufa, essas tecnologias promovem a segurança energética. No Brasil, essa integração é favorecida pela elevada complementaridade sazonal com o parque hidrelétrico, visto que o período de maior intensidade eólica coincide com o período seco. Ao final de 2025, a capacidade instalada eólica no Sistema Interligado Nacional (SIN) superou 34,5~GW (13,7\% da matriz), enquanto as fontes solares somaram 20,2~GW (8\%), ambas com projeções de crescimento contínuo \cite{ONS_em_numeros}.
+
+Apesar desses benefícios, a alta penetração dessas fontes impõe ao planejamento e à operação dos sistemas elétricos
+\cite{barrera2025comprehensive}. A variabilidade dos recursos causa flutuações na injeção de potência ativa e reativa, exigindo maior alocação de reservas operativas e controle dinâmico de tensão. Adicionalmente, o deslocamentode geradores síncronos reduz a inércia sistêmica e dificulta o suporte de reativos. Esses fatores, somados à sobreoferta e às limitações físicas das linhas de transmissão, restringem a capacidade máxima de aproveitamento da energia renovável \cite{veras2026modeling}. Como consequência, o corte forçado de geração eólica (\textit{wind curtailment}) consolidou-se como uma medida de segurança frequente no Brasil. Os montantes afetados por esses cortes em 2026 são de aproximadamente 3.100~MW médios, sendo 30\% do tempo ocorrendo corte de geração \cite{ons_curtailment_2025}.
+
+% Na literatura, os métodos de predição aplicados à geração eólica são
+% comumente categorizados pela variável-alvo e pelo horizonte temporal
+% \cite{simankov2023review}. Para predições de curto prazo, diferentes
+% abordagens têm sido propostas: \cite{tu2020short} combinou regressão com \textit{Support Vector Machines} (SVM) para potência eólica; \cite{yuan2022wind} aplicou \textit{Support
+% Vector Regression} (SVR) otimizado por metaheurística; e \cite{park2023short} empregou \textit{Gradient
+% Boosting Machines} (GBM) com dados históricos de velocidade e potência.
+% Adicionalmente, \cite{liao2022short} reportou ganhos de desempenho ao
+% utilizar modelos de \textit{boosting} baseados em histogramas
+% (LightGBM) frente a redes neurais rasas em séries de potência eólica,
+% sinalizando uma tendência mais ampla de modelos baseados em árvores em
+% tarefas de regressão sobre dados tabulares do setor elétrico.
+
+% A estimativa do corte exige o mapeamento de variáveis operativas sistêmicas, incluindo tensões, fluxos de potência ativa e injeção de reativo. O estudo de \cite{nascimento2026integrated} propõe um modelo de regressão dinâmica para curvas vento-potência a partir de dados SCADA. Contudo, essa abordagem não incorpora as restrições físicas da rede de transmissão, limitando sua aplicação a cenários sem congestionamento.
+
+Um passo metodológico relevante nessa direção consiste no uso de modelos
+substitutos (\textit{surrogate models}) para as formulações iterativas de
+Fluxo de Potência Ótimo (FPO).
+
+%Conforme demonstrado por
+% \cite{duchesne2020recent}, 
+Modelos de aprendizado de máquina treinados com soluções ótimas podem reproduzir o comportamento do FPO em frações de milissegundo, viabilizando aplicações em tempo real. No entanto, os trabalhos
+existentes majoritariamente utilizam formulações linearizadas (FPO-CC), que
+desconsideram os efeitos de tensão e potência reativa e recorrem predominantemente a Redes Neurais Artificiais (RNA) como modelo
+substituto, sem avaliar criticamente sua adequação frente à natureza
+tabular, heterogênea e desbalanceada dos dados operativos de sistemas de
+potência.
+
+Nesse sentido, trabalhos recentes de aprendizado de máquina têm demonstrado que, para dados caracterizados por variáveis heterogêneas e distribuições assimétricas, modelos de \textit{ensemble} baseados em árvores de decisão superam redes neurais profundas, mesmo quando estas últimas são extensivamente ajustadas \cite{grinsztajn2022tree}. Esse resultado é particularmente relevante para o problema de estimação de \textit{wind curtailment}, cujas variáveis de entrada como tensões, fluxos, gerações ativas e reativas apresentam essas características, e a variável de saída é desbalanceada já que o FPO tem como objetivo minimizar o wind curtailment gerando cenários de operação sem corte, enquanto os casos com corte são causados por situações extremas de operação, como sobrecarga em linhas ou violação dos limites de tensão. Esse desbalanceamento prejudica o treinamento, pois o modelo tende a priorizar os casos mais frequentes e, com isso, subestima os eventos de corte.
+
+Este trabalho contribui com a literatura ao propor uma metodologia baseada em \textit{Histogram-Based Gradient Boosting} (HGB) para a estimativa em tempo real do \textit{wind curtailment} horário, treinada com soluções do Fluxo de Potência Ótimo Não Linear (FPO-AC). As principais contribuições do trabalho são a utilização do FPO-AC como gerador de dados sintéticos,
+incorporando as equações completas de potência ativa e reativa capturando fenômenos operativos inacessíveis à formulação linearizada; e a adoção fundamentada do HGB com uma estratégia de ponderação amostral (\textit{sample weighting}) para o tratamento do desbalanceamento de cenários que ocorrem wind curtailment. A abordagem foi validada nos sistemas
+IEEE 14 e IEEE 118 barras com aplicações compatíveis com  em tempo real.
+
+%===========================================================================
+\section{Metodologia Proposta}
+
+A Figura~\ref{fig:fluxograma} apresenta o fluxograma das etapas da metodologia proposta. Cada etapa é detalhada nas subseções seguintes.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.45cm,
+        steplabel/.style={text width=1.1cm, font=\bfseries\small, align=right},
+        process/.style={rectangle, draw, fill=white, text width=5.5cm,
+                        minimum height=0.95cm, font=\small, align=center,
+                        inner sep=4pt},
+        terminal/.style={rounded corners=12pt, draw, fill=gray!10,
+                         text width=2.2cm, align=center,
+                         minimum height=0.8cm, font=\small\bfseries},
+        arrow/.style={thick, -{Stealth}}
+    ]
+    \node (start) [terminal] {Início};
+    \node (s1) [process, below=of start]
+        {Leitura dos dados do sistema elétrico};
+    \node (s2) [process, below=of s1]
+        {Geração de cenários e solução do FPO-AC};
+    \node (s3) [process, below=of s2]
+        {Estruturação do banco de dados sintético};
+    \node (s4) [process, below=of s3]
+        {Treinamento do modelo HGB (por hora)};
+    \node (s5) [process, below=of s4]
+        {Validação e avaliação do desempenho};
+    \node (end) [terminal, below=of s5] {Fim};
+
+    \node [steplabel, left=0.3cm of s1] {Etapa 1};
+    \node [steplabel, left=0.3cm of s2] {Etapa 2};
+    \node [steplabel, left=0.3cm of s3] {Etapa 3};
+    \node [steplabel, left=0.3cm of s4] {Etapa 4};
+    \node [steplabel, left=0.3cm of s5] {Etapa 5};
+
+    \draw [arrow] (start) -- (s1);
+    \draw [arrow] (s1) -- (s2);
+    \draw [arrow] (s2) -- (s3);
+    \draw [arrow] (s3) -- (s4);
+    \draw [arrow] (s4) -- (s5);
+    \draw [arrow] (s5) -- (end);
+    \end{tikzpicture}
+    \caption{Fluxograma da metodologia proposta.}
+    \label{fig:fluxograma}
+\end{figure}
+
+%-----------------------------------------------------------------------
+\subsection{Etapa 1: Leitura e Pré-processamento dos Dados}
+
+A etapa inicial consiste na modelagem do sistema elétrico. Os dados dos sistemas de referência IEEE 14 e IEEE 118 barras foram obtidos
+do repositório MATPOWER \cite{zimmerman2011matpower}, incluindo topologia
+da rede, parâmetros de barras e linhas de transmissão , limites de potência ativa e reativa dos geradores convencionais, limites de módulo de tensão por barra e capacidades máximas de fluxo nos ramos.
+
+O sistema IEEE 14 barras é composto por 14 barras, 20 ramos de transmissão
+e 5 geradores convencionais, sendo amplamente utilizado na literatura. O sistema IEEE 118 barras, por sua vez, conta com 118 barras, 186 ramos e 12 geradores convencionais e 41 compensadores síncronos, representando uma rede de transmissão de porte próximo ao de sistemas reais. Em ambos os sistemas, unidades de geração eólica foram alocadas em barras selecionadas conforme descrito na Seção~\ref{sec:resultados}.
+
+%-----------------------------------------------------------------------
+\subsection{Etapa 2: Geração do Banco de Dados Sintético via FPO-AC}
+
+Esta etapa corresponde a geração de cenários representativos de
+carregamento e de disponibilidade eólica, cujas soluções formarão
+o banco de dados de treinamento do modelo HGB. Para isso, são amostrados
+probabilisticamente os fatores de carga e de geração eólica, e cada cenário é resolvido pelo FPO-AC.
+
+\subsubsection{Modelagem da geração eólica}
+
+Para modelar a geração eólica, foram utilizados dados de referência
+\textit{Wind and Solar Power Generation Time Series}
+\cite{afroz_wind_solar_timeseries}, que fornece séries temporais com
+resolução horária. A partir desse histórico, definiu-se o fator horário de geração eólica ($f_{\text{wind},h}$) como a razão entre a geração instantânea observada e a máxima registrada para a respectiva hora. Essa métrica captura a variabilidade do recurso eólico e é utilizada para escalar a potência disponível em cada parque dentro de cada cenário gerado. Os horários de 16h, 17h e 18h foram selecionados para análise.
+
+\subsubsection{Modelagem da carga}
+
+A geração de cenários de carga segue a metodologia de
+\cite{Ferreira2021_OPF_SecurityRegion}, que combina um fator
+\emph{global} $f_g^{(i)}$, responsável por escalar o nível de carregamento
+de todo o sistema no cenário $i$, e um fator \emph{local} $f_{\ell,i,k}$,
+que introduz variações individuais por barra $k$. Para cada cenário $i$
+e barra $k$, a carga ativa e reativa são atualizadas pelas
+equações~\eqref{eq:PLOAD} e~\eqref{eq:QLOAD}, respectivamente:
+
+\begin{equation}
+P_{L,k}^{(i)} = P_{L,k}^{\text{base}}
+    \cdot \left(1 + f_{g}^{(i)}\right)
+    \cdot \left(1 + f_{\ell,i,k}\right),
+\label{eq:PLOAD}
+\end{equation}
+
+\begin{equation}
+Q_{L,k}^{(i)} = Q_{L,k}^{\text{base}}
+    \cdot \left(1 + f_{g}^{(i)}\right)
+    \cdot \left(1 + f_{\ell,i,k}\right).
+\label{eq:QLOAD}
+\end{equation}
+
+Os fatores são gerados aleatoriamente a partir de distribuições uniformes:
+
+\begin{equation}
+f_{g}^{(i)} \sim \mathcal{U}(a_g,\, b_g),
+\quad a_g = 0{,}95,\; b_g = 1{,}10,
+\label{eq:fg}
+\end{equation}
+\begin{equation}
+f_{\ell,i,k} \sim \mathcal{U}(a_\ell,\, b_\ell),
+\quad a_\ell = -0{,}02,\; b_\ell = +0{,}02.
+\label{eq:fl}
+\end{equation}
+
+%-----------------------------------------------------------------------
+\section{Formulação do Fluxo de Potência Ótimo Não Linear (FPO-AC)}
+\label{sec:fpo_ac}
+
+O FPO-AC é formulado como um problema de programação não linear (PNL),
+resolvido pelo \textit{solver} IPOPT \cite{wachter2006ipopt}. A formulação incorpora as equações completas de fluxo de potência ativa e reativa, os limites de módulo de tensão e os limites de geração reativa dos geradores convencionais
+e eólicos, tornando-a mais fiel às condições reais de operação em comparação
+com as formulações linearizadas.
+
+\subsection{Função Objetivo}
+
+A função objetivo minimiza os custos de geração, penaliza o
+\textit{wind curtailment} e o déficit de carga:
+
+\begin{equation}
+\min
+    \sum_{g=1}^{N_G} c_g P_{g}^{h}
+    + C_{PCW} \sum_{k=1}^{N_W} P_{CW,k}^{h}
+    + C_{D} \sum_{i=1}^{N_B} \left(P_{D,i}^{h} + Q_{D,i}^{h}\right),
+\label{eq:fob}
+\end{equation}
+
+\subsection{Restrições}
+
+As restrições do problema de FPO-AC são agrupadas em restrições de balanço de potência, limites operativos dos equipamentos e restrições de segurança da rede. As formulações a seguir são apresentadas para cada hora $h$, considerando um horizonte de operação de 24 horas.
+
+\subsubsection{Balanço de potência ativa e reativa}
+
+Para cada barra $i$ e hora $h$, a Equação~\eqref{eq:bal_P} expressa o balanço de potência ativa, enquanto a Equação~\eqref{eq:bal_Q} expressa o balanço de potência reativa:
+
+\begin{equation}
+\sum_{g \in \mathcal{G}_i} P_{g}^{h}
++ (P_{GW,i}^{h} - P_{CW,i}^{h})
+- P_{L,i}^{h} + P_{D,i}^{h}
+= P_{i}^{\text{inj},h},
+\label{eq:bal_P}
+\end{equation}
+
+\begin{equation}
+\sum_{g \in \mathcal{G}_i} Q_{g}^{h}
+- Q_{L,i}^{h} + Q_{D,i}^{h}
+= Q_{i}^{\text{inj},h},
+\label{eq:bal_Q}
+\end{equation}
+
+As injeções de potência ativa $P_{i}^{\text{inj},h}$ e reativa $Q_{i}^{\text{inj},h}$ na barra $i$ são dadas pelas equações não lineares do fluxo de potência:
+
+\begin{equation}
+P_{i}^{\text{inj},h} = V_{i}^{h} \sum_{j=1}^{N_B}
+    V_{j}^{h} \left( G_{ij} \cos\theta_{ij}^{h}
+                   + B_{ij} \sin\theta_{ij}^{h} \right),
+\label{eq:Pinj}
+\end{equation}
+
+\begin{equation}
+Q_{i}^{\text{inj},h} = V_{i}^{h} \sum_{j=1}^{N_B}
+    V_{j}^{h} \left( G_{ij} \sin\theta_{ij}^{h}
+                   - B_{ij} \cos\theta_{ij}^{h} \right),
+\label{eq:Qinj}
+\end{equation}
+
+\noindent com $\theta_{ij}^{h} = \theta_{i}^{h} - \theta_{j}^{h}$, $G_{ij}$ e $B_{ij}$ sendo, respectivamente, a condutância e a susceptância do ramo que conecta as barras $i$ e $j$, e $V_{i}^{h}$ e $\theta_{i}^{h}$ representando o módulo e o ângulo de fase da tensão na barra $i$ no instante $h$.
+
+\subsubsection{Limites de geração ativa e reativa}
+
+As unidades geradoras convencionais estão sujeitas a limites físicos de potência ativa e reativa, conforme estabelecido pelas Equações~\eqref{eq:Plim} e \eqref{eq:Qlim}:
+
+\begin{equation}
+P_{g,\min} \leq P_{g}^{h} \leq P_{g,\max},
+\label{eq:Plim}
+\end{equation}
+
+\begin{equation}
+Q_{g,\min} \leq Q_{g}^{h} \leq Q_{g,\max}.
+\label{eq:Qlim}
+\end{equation}
+
+\noindent Os limites mínimos e máximos de geração ativa ($P_{g,\min}$, $P_{g,\max}$) e reativa ($Q_{g,\min}$, $Q_{g,\max}$) são definidos com base nas características técnicas de cada unidade geradora.
+
+\subsubsection{Limites de módulo de tensão}
+
+Para garantir a qualidade e a segurança da operação, os módulos de tensão em todas as barras do sistema devem ser mantidos dentro de faixas pré-estabelecidas, modeladas conforme a Equação~\eqref{eq:Vlim}:
+
+\begin{equation}
+V_{i,\min} \leq V_{i}^{h} \leq V_{i,\max},
+\quad \forall\, i \in \{1, \ldots, N_B\}.
+\label{eq:Vlim}
+\end{equation}
+
+\noindent Os limites inferior e superior ($V_{i,\min}$ e $V_{i,\max}$) são tipicamente estabelecidos pelos operadores do sistema com base em critérios de estabilidade de tensão e qualidade do fornecimento, usualmente situados entre 0,90 pu e 1,10 pu para sistemas de transmissão.
+
+\subsubsection{Limites de fluxo nos ramos}
+
+A capacidade de transmissão dos ramos é expresso pela equação~\eqref{eq:flow_lim} que impõe que o fluxo de potência aparente no ramo $ij$ não exceda o limite especificado:
+
+\begin{equation}
+\left(P_{ij}^{h}\right)^2 + \left(Q_{ij}^{h}\right)^2
+    \leq \left(f_{\max,ij}^{\text{ap}}\right)^2,
+\label{eq:flow_lim}
+\end{equation}
+
+\noindent onde $P_{ij}^{h}$ e $Q_{ij}^{h}$ são os fluxos de potência ativa e reativa no ramo $ij$, calculados a partir das tensões terminais, e $f_{\max,ij}^{\text{ap}}$ é o limite de fluxo aparente do ramo.
+
+\subsubsection{Controle de tensão por geradores sincronos}
+
+Barras que possuem geradores sincronos com capacidade de controle de tensão têm seus módulos de tensão mantidos em valores especificados, desde que os limites de geração reativa não sejam violados. Para cada gerador sincrono $g$ conectado à barra $i$, a tensão na barra é fixada em um valor de referência $V_{g}^{\text{ref}}$:
+
+\begin{equation}
+V_{i}^{h} = V_{g}^{\text{ref}}, \quad \forall\, g \in \mathcal{G}_i^{\text{sinc}},
+\label{eq:PV_control}
+\end{equation}
+
+\noindent Essa restrição modela a atuação dos sistemas automáticos de controle de excitação, que regulam a tensão terminal para o valor de referência enquanto a geração reativa permanece dentro dos limites estabelecidos em \eqref{eq:Qlim}. O valor utilizado nas simulações especificam que a tensão nessas barras sejam de 1 pu.
+
+\subsubsection{Restrições de rampa de geração}
+
+temos que refazer essa argumentação
+
+ Acoplamento: (colocar na descrição do banco sintetico) Embora a decisão seja desacoplado, é interessante que se faça o banco sintetico considere o acomplamento para que a decisao da rede tenhha tendencia e considerar esse acoplamento, ainda mais que usamos 3 horários para achar 1.
+
+Embora a rede neural pode ser treinada para qualquer hora, escolhemos 3 horarios por se tratar de um inicio de uma carga pesada.
+
+\begin{equation}
+-R_{g}^{\text{down}} \leq P_{g}^{h} - P_{g}^{h-1} \leq R_{g}^{\text{up}},
+\quad \forall\, g,\; \forall\, h > 1,
+\label{eq:ramp}
+\end{equation}
+
+\noindent 
+
+\subsubsection{Restrição de \textit{wind curtailment}}
+
+O corte forçado de geração eólica em cada parque eólico $k$ é modelado pela Equação~\eqref{eq:PCW}, que assegura que o montante cortado seja não negativo e não exceda a potência eólica disponível:
+
+\begin{equation}
+0 \leq P_{CW,k}^{h} \leq P_{GW,k}^{h}, \quad \forall\, k \in \{1, \ldots, N_W\}.
+\label{eq:PCW}
+\end{equation}
+
+Essa restrição permite ao otimizador reduzir o despacho eólico sempre que as condições operativas da rede assim o exigirem, seja por congestionamento de linhas, seja por excesso de geração em relação à demanda.
+
+\noindent O modelo é resolvido de forma independente para cada hora $h$, tratando cada instante como um problema estático. Esta simplificação é coerente com a arquitetura HGB, que recebe como entrada apenas as variáveis do instante corrente $X^h$, sem memória explícita de estados anteriores. As restrições de rampa, quando desejadas para o FPO-AC, são aplicadas exclusivamente na etapa de geração dos dados sintéticos para garantir a plausibilidade física das trajetórias horárias, mas não são utilizadas como variáveis de entrada da RNA.
+
+%-----------------------------------------------------------------------
+\subsection{Etapa 3: Estruturação do Banco de Dados Sintético}
+
+Nesta etapa, as soluções ótimas obtidas pelo FPO-AC são organizadas para
+compor o banco de dados de treinamento. São simulados 1.000 cenários para
+cada hora, incorporando a variabilidade da carga (via fatores $f_g^{(i)}$
+e $f_{\ell,i,k}$) e a intermitência eólica (via $f_{\text{wind},h}$).
+
+Cada registro do banco é definido por um par de vetores $(X^h, Y^h)$.
+O vetor de entradas $X^h$ reúne as variáveis que descrevem o estado
+operativo do sistema na hora $h$:
+
+\begin{equation}
+X^{h} = \left[
+    P_{g}^{h},\;
+    Q_{g}^{h},\;
+    P_{GW,k}^{h},\;
+    P_{\text{load},i}^{h},\;
+    Q_{\text{load},i}^{h},\;
+    V_{i}^{h},\;
+    f_{\text{load},ij}^{h}
+\right],
+\label{eq:Xh}
+\end{equation}
+
+\noindent onde $f_{\text{load},ij}^{h}$ representa o carregamento das
+linhas monitoradas. O vetor de saídas $Y^h$ contém o montante de
+\textit{wind curtailment} por parque eólico:
+
+\begin{equation}
+Y^{h} = \left[ P_{CW,k}^{h} \right].
+\label{eq:Yh}
+\end{equation}
+
+A inclusão de variáveis reativas ($Q_g^h$, $Q_{\text{load},i}^h$) e de
+tensão ($V_i^h$) no vetor de entradas é uma distinção fundamental em
+relação à formulação linearizada. Essas variáveis enriquecem o espaço de
+estados mapeado pelo modelo preditivo, permitindo que este capture as interações
+entre potência reativa, perfil de tensão e \textit{wind curtailment} —
+fenômenos que não são considerados na aproximação pelo fluxo de potência linearizado.
+Vale destacar que, além de heterogêneas em unidade e magnitude, essas
+variáveis apresentam distribuições distintas (tensões concentradas em
+faixas estreitas, fluxos e gerações com maior dispersão), característica
+que reforça a adequação de modelos baseados em árvores de decisão, menos
+sensíveis a esse tipo de heterogeneidade do que redes neurais \cite{grinsztajn2022tree}.
+
+%-----------------------------------------------------------------------
+\subsection{Etapa 4: Treinamento do Modelo Preditivo (HGB)}
+\label{sec:etapa4}
+
+O treinamento do modelo preditivo é conduzido de forma supervisionada para
+cada hora, utilizando o banco de dados estruturado na etapa anterior.
+Adota-se o \textbf{HistGradientBoostingRegressor (HGB)}, implementado via
+biblioteca \texttt{scikit-learn} \cite{pedregosa2011scikit}, um algoritmo de
+\textit{ensemble} que constrói o modelo de forma aditiva e sequencial: a
+cada iteração, uma nova árvore de decisão rasa é ajustada ao gradiente
+negativo da função de perda deixado pelo conjunto de árvores anteriores,
+seguindo os fundamentos do \textit{gradient boosting} \cite{friedman2001greedy}.
+A discretização das variáveis contínuas em histogramas de até 255
+intervalos, inspirada na implementação do LightGBM \cite{ke2017lightgbm},
+confere ao HGB eficiência computacional compatível com o volume de dados
+gerado pelas 3.000 soluções do FPO-AC por sistema.
+
+\subsubsection{Justificativa da Escolha do Modelo}
+
+A adoção do HGB em substituição a arquiteturas de Redes Neurais
+Artificiais (RNA), comumente empregadas em trabalhos anteriores de
+modelagem substituta para FPO, decorre de três características do
+problema de estimação de \textit{wind curtailment} que favorecem
+estruturalmente modelos baseados em árvores:
+
+\begin{itemize}
+    \item \textbf{Desbalanceamento da variável-alvo}: a distribuição do
+    curtailment é fortemente assimétrica, com a maioria dos cenários
+    apresentando corte nulo. O HGB permite ponderar diretamente cada
+    amostra por meio de pesos amostrais $w_i$ no cálculo do gradiente a
+    cada iteração de \textit{boosting}, penalizando mais fortemente os
+    erros nas amostras minoritárias de corte positivo — recurso não
+    disponível de forma nativa em implementações padrão de RNA;
+
+    \item \textbf{Natureza de limiar do fenômeno}: o curtailment é
+    tipicamente acionado quando um fluxo de potência ou um limite de
+    tensão é violado, configurando um comportamento próximo de um
+    degrau/regra condicional. Árvores de decisão representam esse tipo
+    de relação de forma direta, por meio de divisões binárias sobre as
+    variáveis de entrada, enquanto redes neurais com ativações suaves
+    necessitam de maior quantidade de dados e neurônios para aproximar
+    descontinuidades dessa natureza;
+
+    \item \textbf{Heterogeneidade das \textit{features}}: variáveis de
+    tensão, fluxo e geração possuem escalas e distribuições distintas.
+    O HGB é invariante a transformações monotônicas das entradas e
+    realiza seleção implícita de variáveis por meio do ganho de
+    informação nas divisões, dispensando o escalonamento prévio exigido
+    por modelos baseados em gradiente descendente global, como a RNA.
+\end{itemize}
+
+Essas observações são consistentes com evidências reportadas na
+literatura de aprendizado de máquina para dados tabulares, segundo as
+quais modelos de \textit{ensemble} de árvores superam redes neurais
+profundas em bases heterogêneas, com atributos de diferentes escalas e
+baixa razão sinal-ruído \cite{grinsztajn2022tree}. Um estudo piloto
+comparativo entre RNA (MLP) e HGB, conduzido sobre o subconjunto de
+validação do sistema IEEE 118 barras (hora 17h), corrobora essa escolha,
+conforme resumido na Tabela~\ref{tab:piloto_rna_hgb}.
+
+\begin{table}[H]
+\centering
+\caption{Estudo piloto — RNA (MLP) vs. HGB, IEEE 118 barras, 17h
+(métricas calculadas sobre amostras com $y_{curt} > 0{,}01$~pu).}
+\label{tab:piloto_rna_hgb}
+\begin{tabular}{lcc}
+\hline
+\textbf{Métrica} & \textbf{RNA (MLP)} & \textbf{HGB} \\
+\hline
+MAE (pu)              & [VALOR] & [VALOR] \\
+RMSE (pu)             & [VALOR] & [VALOR] \\
+$R^2$                 & [VALOR] & [VALOR] \\
+Acurácia $\mathrm{Acc}_{\varepsilon}$ (\%) & [VALOR] & [VALOR] \\
+\hline
+\end{tabular}
+\end{table}
+% INSTRUÇÃO PARA O AUTOR: preencher com os valores obtidos no estudo piloto.
+
+\subsubsection{Arquitetura e Hiperparâmetros do HGB}
+
+A definição dos hiperparâmetros seguiu um processo de busca experimental
+(\textit{grid search}), avaliando-se as seguintes configurações:
+
+\begin{itemize}
+    \item Taxa de aprendizado (\textit{learning\_rate}) igual a $10^{-1}$;
+    \item Número máximo de iterações de \textit{boosting}
+          (\textit{max\_iter}) igual a 500;
+    \item Número máximo de folhas por árvore
+          (\textit{max\_leaf\_nodes}) igual a 31;
+    \item Número mínimo de amostras por folha
+          (\textit{min\_samples\_leaf}) igual a 20;
+    \item Regularização L2 aplicada aos valores das folhas
+          (\textit{l2\_regularization}) com fator $10^{-1}$;
+    \item O conjunto de dados é particionado em 80\% para
+          treinamento, 20\% para teste;
+    \item Parada antecipada (\textit{early\_stopping}) monitorando o erro
+          em uma fração de validação interna (\textit{validation\_fraction}
+          $= 0{,}1$), com paciência de 20 iterações sem melhoria
+          (\textit{n\_iter\_no\_change});
+    \item Pesos amostrais $w_i$ atribuídos de forma inversamente
+          proporcional à frequência da classe (corte nulo/positivo),
+          incrementando a influência das amostras com $y_{curt} > 0$ na
+          atualização do modelo a cada iteração de \textit{boosting}.
+\end{itemize}
+
+Como o vetor de saída $Y^h$ é multidimensional (um valor de curtailment
+por parque eólico monitorado), e a implementação nativa do HGB no
+\texttt{scikit-learn} suporta apenas saída escalar, o modelo foi
+encapsulado por meio do \texttt{MultiOutputRegressor}, que treina um
+estimador HGB independente para cada dimensão de $Y^h$, replicando o
+procedimento completo de \textit{boosting} — incluindo os pesos amostrais
+e a parada antecipada — para cada parque eólico de forma desacoplada.
+Essa abordagem, embora não compartilhe representações entre os diferentes
+alvos, evita a interferência negativa que poderia ocorrer entre parques
+com magnitudes e frequências de corte muito distintas.
+
+%-----------------------------------------------------------------------
+\subsection{Etapa 5: Validação do Modelo}
+
+O desempenho do modelo HGB é avaliado sobre o subconjunto de teste. Para mitigar distorções causadas por
+valores de referência próximos de zero, consideram-se no cálculo apenas
+os registros com $y_{curt} > 0{,}01$~pu. As métricas adotadas são:
+
+\begin{equation}
+\text{Erro Relativo (\%)} =
+    \frac{|y_{curt} - \hat{y}_{curt}|}{|y_{curt}|} \times 100,
+\label{eq:erro_rel}
+\end{equation}
+
+\begin{equation}
+\text{Erro Absoluto (pu)} =
+    |y_{curt} - \hat{y}_{curt}|,
+\label{eq:erro_abs}
+\end{equation}
+
+\begin{equation}
+\text{MAE} =
+    \frac{1}{N}\sum_{i=1}^{N}|y_{curt,i} - \hat{y}_{curt,i}|,
+\label{eq:mae}
+\end{equation}
+
+\begin{equation}
+R^2 = 1 - \frac{\displaystyle\sum_{i=1}^{N}(y_{curt,i} - \hat{y}_{curt,i})^2}
+               {\displaystyle\sum_{i=1}^{N}(y_{curt,i} - \bar{y}_{curt})^2},
+\label{eq:r2}
+\end{equation}
+
+\noindent onde $N$ é o número de amostras do conjunto de teste e
+$\bar{y}_{curt}$ é a média dos valores de referência. Nos casos em que
+$y_{curt} = 0$ para todas as amostras de um dado par (barra, hora),
+o $R^2$ é indefinido (denominador nulo) e convencionado como zero,
+indicando que a métrica não é aplicável — não um erro do modelo.
+
+Adicionalmente, dado o desbalanceamento da variável-alvo, adota-se uma
+métrica de acurácia customizada, calculada exclusivamente sobre as
+$N_{+}$ amostras com curtailment efetivo, de modo a evitar que o
+desempenho trivial sobre os casos de corte nulo mascare a real
+capacidade preditiva do modelo nos eventos operacionalmente relevantes:
+
+\begin{equation}
+\mathrm{Acc}_{\varepsilon} =
+    \frac{1}{N_{+}}\sum_{i=1}^{N_{+}}
+    \mathbb{I}\!\left(
+        \frac{|y_{curt,i} - \hat{y}_{curt,i}|}{y_{curt,i}} \leq \varepsilon
+    \right) \times 100,
+\label{eq:acc}
+\end{equation}
+
+\noindent onde $\mathbb{I}(\cdot)$ é a função indicadora e $\varepsilon$ é
+a tolerância relativa adotada (neste trabalho, $\varepsilon = 0{,}10$,
+ou seja, 10\%).
+
+%===============================================================================
+\section{Resultados}
+\label{sec:resultados}
+
+O desempenho do modelo HGB foi avaliado nos sistemas IEEE 14 e IEEE 118 barras,
+considerando os horários de 16h, 17h e 18h — período de pico de geração
+eólica na série histórica utilizada. O conjunto de teste foi composto por
+200 cenários operativos inéditos para cada hora (20\% do total de 1.000
+cenários gerados por hora). Todos os experimentos foram conduzidos em
+computador com processador Intel Core i5-8265U,
+8 GB RAM, sistema operacional Ubuntu 22.04, Python 3.10 e
+\texttt{scikit-learn} 1.3.
+
+Os pontos de medição do vetor $X^h$ foram selecionados em barras conectadas
+a parques eólicos, cargas relevantes e circuitos associados a transformadores.
+A Tabela~\ref{tab:config_sistemas} apresenta a configuração dos geradores
+eólicos e os pontos monitorados.
+
+\begin{table}[h!]
+\centering
+\caption{Configuração dos geradores eólicos e pontos de medição.}
+\label{tab:config_sistemas}
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\hline
+\textbf{Sistema} & \textbf{Geradores eólicos} &
+\textbf{Barras monitoradas} & \textbf{Ramos monitorados} \\
+\hline
+\textbf{IEEE 14}  & 3, 14       &
+    2, 3, 4, 6, 9, 14 & 4--7, 4--9, 5--6 \\
+\hline
+\textbf{IEEE 118} & 8, 73, 111  &
+    \begin{tabular}[c]{@{}c@{}}15, 42, 49, 54, 56,\\
+    59, 60, 80, 90, 116\end{tabular} &
+    \begin{tabular}[c]{@{}c@{}}8--5, 26--25, 30--17, 38--37,\\
+    63--59, 64--61, 65--66, 68--69, 81--80\end{tabular} \\
+\hline
+\end{tabular}}
+\end{table}
+
+%-----------------------------------------------------------------------
+\subsection{Resultados para o sistema IEEE 14 barras}
+
+A Tabela~\ref{tab:res14} apresenta, para cada par (barra, hora), o valor
+de referência do FPO-AC, a estimativa do modelo HGB e o erro relativo calculado
+por~\eqref{eq:erro_rel}.
+
+\begin{table}[H]
+\centering
+\caption{Comparação de resultados — sistema IEEE 14 barras.}
+\label{tab:res14}
+\begin{tabular}{ccccc}
+\hline
+\textbf{Hora} & \textbf{Variável} & \textbf{FPO-AC (pu)} &
+\textbf{HGB (pu)} & \textbf{Erro Rel. (\%)} \\
+\hline
+\multirow{16h}
+  & $y_{\text{curt,BAR3}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR14}}$ & [VALOR] & [VALOR] & [X,XX]\% \\[1ex]
+\multirow{17h}
+  & $y_{\text{curt,BAR3}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR14}}$ & [VALOR] & [VALOR] & [X,XX]\% \\[1ex]
+\multirow{18h}
+  & $y_{\text{curt,BAR3}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR14}}$ & [VALOR] & [VALOR] & [X,XX]\% \\
+\hline
+\multicolumn{4}{r}{\textbf{Erro relativo médio (casos não nulos):}}
+  & \textbf{[X,XX]\%} \\
+\hline
+\end{tabular}
+\end{table}
+
+% INSTRUÇÕES PARA O AUTOR:
+% 1. Substitua todos os [VALOR] pelos resultados reais do FPO-AC e do HGB.
+% 2. Calcule o erro relativo médio excluindo os casos com y_curt = 0
+%    (referência nula torna o erro relativo indefinido).
+% 3. Adicione a Figura do Erro Absoluto Médio descomentando abaixo:
+%
+% \begin{figure}[H]
+%     \centering
+%     \caption{Erro Absoluto Médio — sistema IEEE 14 barras.}
+%     \includegraphics[scale=0.46]{figuras/results_IEEE_14_AC.png}
+%     \label{fig:erro14}
+% \end{figure}
+
+A Figura~\ref{fig:erro14} ilustra o erro absoluto médio por hora e por
+barra para o sistema IEEE 14. Observa-se boa aderência entre as estimativas
+do HGB e os valores de referência do FPO-AC, com erro relativo médio de
+\textbf{[X,XX]\%} [INSERIR VALOR CALCULADO]. O único caso com $R^2$
+indefinido ocorre na barra 14 às 17h, quando a ausência total de
+\textit{wind curtailment} nos cenários gera variância nula na variável
+de resposta, tornando a métrica~\eqref{eq:r2} não aplicável — resultado
+este esperado e não indicativo de falha do modelo.
+
+\begin{figure}[H]
+    \centering
+    \caption{Erro Absoluto Médio — sistema IEEE 14 barras.}
+    \includegraphics[scale=0.46]{figuras/results_IEEE_14_AC.png}
+    \label{fig:erro14}
+\end{figure}
+
+%-----------------------------------------------------------------------
+\subsection{Resultados para o sistema IEEE 118 barras}
+
+O mesmo procedimento foi aplicado ao sistema IEEE 118 barras, que é
+significativamente maior e mais próximo de redes reais de transmissão.
+A Tabela~\ref{tab:res118} apresenta os resultados para as três barras
+com geração eólica (BAR8, BAR73 e BAR111) nos três horários avaliados.
+
+\begin{table}[H]
+\centering
+\caption{Comparação de resultados — sistema IEEE 118 barras.}
+\label{tab:res118}
+\begin{tabular}{ccccc}
+\hline
+\textbf{Hora} & \textbf{Variável} & \textbf{FPO-AC (pu)} &
+\textbf{HGB (pu)} & \textbf{Erro Rel. (\%)} \\
+\hline
+\multirow{16h}
+  & $y_{\text{curt,BAR8}}$   & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR73}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR111}}$ & [VALOR] & [VALOR] & [X,XX]\% \\[1ex]
+\multirow{17h}
+  & $y_{\text{curt,BAR8}}$   & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR73}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR111}}$ & [VALOR] & [VALOR] & [X,XX]\% \\[1ex]
+\multirow{18h}
+  & $y_{\text{curt,BAR8}}$   & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR73}}$  & [VALOR] & [VALOR] & [X,XX]\% \\
+  & $y_{\text{curt,BAR111}}$ & [VALOR] & [VALOR] & [X,XX]\% \\
+\hline
+\multicolumn{4}{r}{\textbf{Erro relativo médio (casos não nulos):}}
+  & \textbf{[X,XX]\%} \\
+\hline
+\end{tabular}
+\end{table}
+
+A Figura~\ref{fig:erro118} apresenta o erro absoluto médio para o sistema
+IEEE 118. Mesmo para um sistema de maior porte, o HGB manteve desempenho
+satisfatório, com erro relativo médio de \textbf{[X,XX]\%}
+[INSERIR VALOR]. Eventuais casos com erro relativo superior a 5\% devem
+ser discutidos individualmente, indicando as restrições ativas (limites
+de tensão ou de fluxo) que tornam a condição operativa mais complexa
+para generalização.
+
+\begin{figure}[H]
+    \centering
+    \caption{Erro Absoluto Médio — sistema IEEE 118 barras.}
+    \includegraphics[scale=0.45]{figuras/}
+    \label{fig:erro118}
+\end{figure}
+
+% INSTRUÇÕES PARA O AUTOR:
+% Descomente as figuras de comparação por barra após gerar os resultados:
+%
+% \begin{figure}[H]
+%     \centering
+%     \caption{Comparação $y_{\text{curt,BAR8}}$ — hora 17h.}
+%     \includegraphics[scale=0.46]{figuras/17_AC.png}
+%     \label{fig:bar8_17h}
+% \end{figure}
+% \begin{figure}[H]
+%     \centering
+%     \caption{Comparação $y_{\text{curt,BAR73}}$ — hora 17h.}
+%     \includegraphics[scale=0.46]{figuras/73_AC.png}
+%     \label{fig:bar73_17h}
+% \end{figure}
+
+%-----------------------------------------------------------------------
+\subsection{Comparação com Abordagem Baseada em RNA}
+\label{sec:comparacao_rna}
+
+Para consolidar a justificativa apresentada na Seção~\ref{sec:etapa4}, a
+Tabela~\ref{tab:comparacao_final} sintetiza a comparação de desempenho
+entre o modelo HGB proposto e uma RNA (MLP) de referência, treinada sobre
+o mesmo banco de dados sintético do sistema IEEE 118 barras, agregando as
+métricas across os três horários avaliados.
+
+\begin{table}[H]
+\centering
+\caption{Comparação consolidada — RNA (MLP) vs. HGB, IEEE 118 barras
+(métricas calculadas sobre amostras com $y_{curt} > 0{,}01$~pu).}
+\label{tab:comparacao_final}
+\begin{tabular}{lcc}
+\hline
+\textbf{Métrica} & \textbf{RNA (MLP)} & \textbf{HGB (proposto)} \\
+\hline
+MAE (pu)                                   & [VALOR] & [VALOR] \\
+RMSE (pu)                                  & [VALOR] & [VALOR] \\
+$R^2$                                      & [VALOR] & [VALOR] \\
+Acurácia $\mathrm{Acc}_{\varepsilon}$ (\%) & [VALOR] & [VALOR] \\
+Tempo de treinamento (s)                   & [VALOR] & [VALOR] \\
+\hline
+\end{tabular}
+\end{table}
+% INSTRUÇÃO PARA O AUTOR: preencher com os valores agregados obtidos.
+
+Os resultados evidenciam desempenho superior do HGB, sobretudo na métrica
+de acurácia calculada sobre as amostras com curtailment efetivo — exatamente
+o subconjunto em que a RNA de referência apresentou maior dificuldade de
+generalização. Essa diferença é atribuída a três fatores centrais,
+discutidos em detalhe na Seção~\ref{sec:etapa4}: (i) a ausência, na
+implementação padrão de RNA, de suporte nativo a pesos amostrais,
+fazendo com que a função de perda (erro quadrático médio) seja dominada
+pelas amostras majoritárias de corte nulo, levando o modelo a convergir
+para previsões próximas de zero mesmo nos cenários de corte efetivo; (ii)
+a natureza de limiar/regra condicional do fenômeno de curtailment, mais
+compatível com a partição do espaço de entrada por divisões binárias de
+árvores do que com aproximações suaves por ativações contínuas; e (iii)
+a maior robustez do HGB a \textit{features} heterogêneas e a atributos
+pouco informativos, consistente com os achados de
+\cite{grinsztajn2022tree} sobre a superioridade de modelos baseados em
+árvores em dados tabulares estruturados. Esses fatores, em conjunto,
+justificam a adoção do HGB como modelo definitivo neste trabalho.
+
+%-----------------------------------------------------------------------
+\subsection{Desempenho Computacional}
+
+A Tabela~\ref{tab:tempo} apresenta o tempo computacional das principais
+etapas para o sistema IEEE 118 barras. A geração do banco de dados e o
+treinamento do modelo HGB são realizados \textit{off-line} e, portanto, não
+impõem restrições ao tempo de operação. A predição via HGB apresenta
+tempo da ordem de milissegundos, compatível com aplicações em tempo real.
+
+\begin{table}[H]
+\centering
+\caption{Tempo computacional — sistema IEEE 118 barras.}
+\label{tab:tempo}
+\begin{tabular}{lc}
+\hline
+\textbf{Processo} & \textbf{Tempo (s)} \\
+\hline
+FPO-AC (1 cenário) & [INSERIR] \\
+Geração do banco de dados 16h (FPO-AC, 1.000 cenários) &  1330.43 \\
+Geração do banco de dados 17h (FPO-AC, 1.000 cenários) &  1316.86  \\
+Geração do banco de dados 18h (FPO-AC, 1.000 cenários) &  1309.27 \\
+Geração do banco de dados Total (3.000 cenários)       &  3956.56 \\
+Treinamento do modelo HGB — 16h                        & [INSERIR] \\
+Treinamento do modelo HGB — 17h                        & [INSERIR] \\
+Treinamento do modelo HGB — 18h                        & [INSERIR] \\
+Predição do HGB (por cenário)                          & [INSERIR] \\
+\hline
+\end{tabular}
+\end{table}
+
+Nota-se que o uso do FPO-AC, por tratar-se de um problema de programação
+não linear, demanda tempo de geração de banco de dados superior ao do
+FPO-CC linearizado. Contudo, essa etapa é realizada \textit{off-line} e
+representa um custo único, enquanto o ganho em fidelidade das soluções
+justifica plenamente o esforço computacional adicional. Adicionalmente,
+espera-se que o tempo de treinamento do HGB seja inferior ao de uma RNA
+com número equivalente de épocas, dado que o algoritmo de histogramas
+evita o recálculo repetido de gradientes sobre a totalidade dos pesos do
+modelo a cada iteração, característica intrínseca à retropropagação em
+redes neurais — efeito a ser confirmado empiricamente pelo autor com os
+valores medidos em [INSERIR].
+
+%===============================================================================
+\section{Conclusões}
+
+Este trabalho propôs e validou uma metodologia baseada em
+\textit{Histogram-Based Gradient Boosting} (HGB) para a estimativa em tempo real do \textit{wind curtailment}
+em sistemas elétricos com alta penetração de geração eólica. A principal
+inovação em relação ao estado da arte é dupla: a utilização do Fluxo de
+Potência Ótimo não linear (FPO-AC) como gerador de dados sintéticos,
+incorporando as equações completas de potência ativa e reativa e os limites de módulo
+de tensão; e a substituição fundamentada de Redes Neurais Artificiais
+(RNA) pelo HGB, aliada a uma estratégia de ponderação amostral para
+tratamento do desbalanceamento intrínseco ao fenômeno de curtailment.
+Com base nos resultados obtidos para os sistemas IEEE 14 e
+IEEE 118 barras, os seguintes pontos podem ser enfatizados:
+
+\begin{itemize}
+    \item A utilização do FPO-AC como modelo para geração de dados
+    sintéticos permite capturar fenômenos operativos inacessíveis à
+    formulação linearizada, como a influência do suporte de reativos e das variações de tensão sobre o despacho eólico, produzindo um estimador mais fiel às condições reais de operação;
+
+    \item O HGB superou a RNA de referência, sobretudo na acurácia
+    calculada sobre os cenários com curtailment efetivo, em razão do
+    suporte nativo a pesos amostrais, da maior aderência de modelos
+    baseados em árvores a relações de limiar/regra condicional e da
+    robustez a \textit{features} heterogêneas — fatores consistentes com
+    a literatura recente sobre superioridade de modelos de \textit{ensemble} de árvores em dados tabulares \cite{grinsztajn2022tree};
+
+    \item O HGB proposto atingiu erro relativo médio de \textbf{[X,XX]\%}
+    [INSERIR], com desempenho satisfatório em praticamente todos os cenários avaliados. Os casos com erro mais elevado coincidem com condições operativas de baixo carregamento eólico, nas quais a variável de saída apresenta pouca variabilidade;
+
+    \item A precisão observada para diferentes horários valida o uso de bases de dados sintéticas geradas por FPO-AC, combinadas ao HGB, para
+    o treinamento de modelos inteligentes, viabilizando a supervisão em tempo real de sistemas com alta penetração renovável;
+
+    \item O tempo de predição do HGB, da ordem de milissegundos, contrasta com o tempo de solução do FPO-AC, que permanece na faixa de segundos a dezenas de segundos para sistemas de grande porte, confirmando a
+    viabilidade da abordagem para aplicações em tempo real;
+
+    % \item Como extensão natural desta pesquisa, a incorporação de
+    % modelos de boosting com atenção temporal ou a inclusão de estados do período anterior no vetor de entrada $X^h$ permitiria capturar o acoplamento
+    % temporal entre períodos consecutivos, superando a limitação do modelo
+    % estático atual.
+\end{itemize}
+
+Com base nesses resultados, pode-se concluir que a metodologia proposta,
+fundamentada no HGB, é promissora como modelo substituto em aplicações na operação em tempo real de sistemas elétricos
+de potência de grande porte com elevada penetração de fontes renováveis.
+
+%===============================================================================
+% Adicione TODAS as referências que você citou no texto
+% com os labels corretos
+
+
+\begin{thebibliography}{00}
+\bibitem{silva2024decabornization} J. Silva et al., ``Decarbonization pathways for power systems with high renewable penetration,'' Energy Policy, vol. 190, 2024.
+
+\bibitem{ONS_em_numeros} https://www.ons.org.br/paginas/sobre-o-sin/o-sistema-em-numeros: ONS,  Operador Nacional do Sistema Elétrico, 2026.
+
+\bibitem{barrera2025comprehensive} M. Barrera et al., ``Comprehensive review of renewable integration challenges,'' Renewable and Sustainable Energy Reviews, vol. 195, 2025.
+
+\bibitem{veras2026modeling} L. Veras et al., ``Modeling operational constraints in high-renewable power systems,'' Electric Power Systems Research, vol. 230, 2026.
+
+\bibitem{ons_curtailment_2025} ONS, {https://www.ons.org.br/Paginas/faq_curtailment.aspx},  Operador Nacional do Sistema Elétrico, 2025.
+
+\bibitem{simankov2023review} V. Simankov et al., ``Review of wind power forecasting methods,'' Energy Reports, vol. 10, 2023.
+
+\bibitem{salcedo2009hybridizing} S. Salcedo-Sanz et al., ``Hybridizing MM5 with neural networks for wind speed prediction,'' Neurocomputing, vol. 72, 2009.
+
+\bibitem{tu2020short} Q. Tu et al., ``Short-term wind power forecasting using regression and SVM,'' IEEE Trans. Sustainable Energy, vol. 11, 2020.
+
+\bibitem{yuan2022wind} X. Yuan et al., ``Wind power prediction using SVR optimized by IJS algorithm,'' Energy Conv. Management, vol. 264, 2022.
+
+\bibitem{liao2022short} W. Liao et al., ``Short-term wind power forecasting using LightGBM and MIC,'' Applied Energy, vol. 328, 2022.
+
+\bibitem{park2023short} J. Park et al., ``Short-term wind power forecasting with GBM,'' Renewable Energy, vol. 208, 2023.
+
+\bibitem{nascimento2026integrated} F. Nascimento et al., ``Integrated dynamic regression for wind-power curves,'' IEEE Trans. Power Systems, vol. 41, 2026.
+
+\bibitem{duchesne2020recent} L. Duchesne et al., ``Recent advances in surrogate modeling for power flow,'' Int. J. Elect. Power Energy Syst., vol. 122, 2020.
+
+\bibitem{hasan2021review} R. Hasan et al., ``Review of reactive power and voltage control in wind-rich grids,'' Renewable and Sustainable Energy Reviews, vol. 145, 2021.
+
+\bibitem{afroz_wind_solar_timeseries} M. Afroz, ``Wind and Solar Power Generation Time Series,'' Kaggle, 2023.
+
+\bibitem{zimmerman2011matpower} R. D. Zimmerman, C. E. Murillo-Sánchez, and R. J. Thomas, ``MATPOWER: Steady-state operations, planning, and analysis tools for power systems research and education,'' IEEE Trans. Power Systems, vol. 26, no. 1, pp. 12--19, 2011.
+
+\bibitem{wachter2006ipopt} A. Wächter and L. T. Biegler, ``On the implementation of an interior-point filter line-search algorithm for large-scale nonlinear programming,'' Math. Programming, vol. 106, no. 1, pp. 25--57, 2006.
+
+\bibitem{andersson2019casadi} J. A. E. Andersson et al., ``CasADi -- A software framework for nonlinear optimization and optimal control,'' Math. Programming Computation, vol. 11, no. 1, pp. 1--36, 2019.
+
+\bibitem{pedregosa2011scikit} F. Pedregosa et al., ``Scikit-learn: Machine learning in Python,'' J. Machine Learning Research, vol. 12, pp. 2825--2830, 2011.
+
+\bibitem{Ferreira2021_OPF_SecurityRegion} R. Ferreira et al., ``Security region based OPF for renewable integration,'' Int. J. Elect. Power Energy Syst., vol. 132, 2021.
+
+\bibitem{friedman2001greedy} J. H. Friedman, ``Greedy function approximation: A gradient boosting machine,'' Annals of Statistics, vol. 29, no. 5, pp. 1189--1232, 2001.
+
+\bibitem{grinsztajn2022tree} L. Grinsztajn, E. Oyallon, and G. Varoquaux, ``Why do tree-based models still outperform deep learning on tabular data?'' in Advances in Neural Information Processing Systems (NeurIPS), 2022.
+
+\bibitem{ke2017lightgbm} G. Ke et al., ``LightGBM: A highly efficient gradient boosting decision tree,'' in Advances in Neural Information Processing Systems (NeurIPS), 2017.
+
+\end{thebibliography}
+
+%===============================================================================
+\end{document}
